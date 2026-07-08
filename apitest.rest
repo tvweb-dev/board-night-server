@@ -1,0 +1,7 @@
+@url = http://localhost:3000
+
+### Server health
+GET {{url}}/health
+
+### Database health
+GET {{url}}/db/health
