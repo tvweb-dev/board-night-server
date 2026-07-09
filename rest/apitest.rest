@@ -94,3 +94,76 @@ Content-Type: application/json
 
 ### Get RSVPs for event 1
 GET {{baseUrl}}/api/events/1/rsvps
+
+### Create user profile      *****PHASE 2 + 3 API TESTING*****
+POST {{baseUrl}}/api/profiles
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "firstName": "Theo",
+  "lastName": "Test",
+  "nickname": "Board Boss",
+  "imageUrl": "",
+  "birthday": "1990-01-01",
+  "favoriteFood": "Pizza",
+  "favoriteDrink": "Coffee",
+  "allergies": "None",
+  "city": "Victoria",
+  "province": "British Columbia",
+  "country": "Canada"
+}
+
+### Get user profile
+GET {{baseUrl}}/api/profiles/1
+
+### Update user profile
+PUT {{baseUrl}}/api/profiles/1
+Content-Type: application/json
+
+{
+  "firstName": "Theo",
+  "lastName": "Updated",
+  "nickname": "Dice Master",
+  "imageUrl": "",
+  "birthday": "1990-01-01",
+  "favoriteFood": "Tacos",
+  "favoriteDrink": "Tea",
+  "allergies": "None",
+  "city": "Victoria",
+  "province": "British Columbia",
+  "country": "Canada"
+}
+
+### Create game
+POST {{baseUrl}}/api/games
+Content-Type: application/json
+
+{
+  "gameName": "Catan",
+  "category": "Strategy"
+}
+
+### Get games
+GET {{baseUrl}}/api/games
+
+### Add favorite game
+POST {{baseUrl}}/api/games/favorites
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "gameId": 1
+}
+
+### Get user favorite games
+GET {{baseUrl}}/api/games/favorites/1
+
+### Remove favorite game
+DELETE {{baseUrl}}/api/games/favorites
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "gameId": 1
+}

@@ -8,6 +8,8 @@ const usersRoutes = require("./routes/users.routes");
 const groupsRoutes = require("./routes/groups.routes");
 const eventsRoutes = require("./routes/events.routes");
 const invitesRoutes = require("./routes/invites.routes");
+const profilesRoutes = require("./routes/profiles.routes");
+const gamesRoutes = require("./routes/games.routes");
 
 const app = express();
 
@@ -47,6 +49,8 @@ app.use("/api/users", usersRoutes);
 app.use("/api/groups", groupsRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/invites", invitesRoutes);
+app.use("/api/profiles", profilesRoutes);
+app.use("/api/games", gamesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
