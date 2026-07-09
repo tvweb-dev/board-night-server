@@ -1,0 +1,96 @@
+@baseUrl = http://localhost:3000
+
+### Health check
+GET {{baseUrl}}/health
+
+### DB health check
+GET {{baseUrl}}/db/health
+
+### Create host user
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "host@test.com",
+  "password": "password123"
+}
+
+### Create member user
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "member@test.com",
+  "password": "password123"
+}
+
+### Login host user
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+  "email": "host@test.com",
+  "password": "password123"
+}
+
+### Create group
+POST {{baseUrl}}/api/groups
+Content-Type: application/json
+
+{
+  "groupName": "Friday Board Night",
+  "createdBy": 1
+}
+
+### Get groups for user 1
+GET {{baseUrl}}/api/groups/user/1
+
+### Add user 2 to group 1
+POST {{baseUrl}}/api/groups/members
+Content-Type: application/json
+
+{
+  "groupId": 1,
+  "userId": 2,
+  "memberRole": "MEMBER"
+}
+
+### Get members for group 1
+GET {{baseUrl}}/api/groups/1/members
+
+### Create event
+POST {{baseUrl}}/api/events
+Content-Type: application/json
+
+{
+  "groupId": 1,
+  "hostId": 1,
+  "eventTitle": "Catan Night",
+  "eventDate": "2026-07-15",
+  "eventTime": "19:00:00",
+  "eventLocation": "Library Room A"
+}
+
+### Get events for group 1
+GET {{baseUrl}}/api/events/group/1
+
+### Invite user 2 to event 1
+POST {{baseUrl}}/api/invites
+Content-Type: application/json
+
+{
+  "eventId": 1,
+  "userId": 2
+}
+
+### RSVP going
+PUT {{baseUrl}}/api/invites/rsvp
+Content-Type: application/json
+
+{
+  "inviteId": 1,
+  "rsvpStatus": "GOING"
+}
+
+### Get RSVPs for event 1
+GET {{baseUrl}}/api/events/1/rsvps
