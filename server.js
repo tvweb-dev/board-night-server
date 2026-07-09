@@ -1,4 +1,4 @@
-const port = Number(process.env.PORT) || 3000;
+const port = Number(process.env.PORT || process.env.nodeport) || 3000;
 const app = require("./app");
 
 app.listen(port, () => {
