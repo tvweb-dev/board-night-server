@@ -11,6 +11,7 @@ function invitationDetails(invite) {
   return {
     eventId: getValue(invite, "EVENT_ID", "eventId"),
     eventTitle: getValue(invite, "EVENT_TITLE", "eventTitle"),
+    eventDescription: getValue(invite, "EVENT_DESCRIPTION", "eventDescription"),
     eventDate: getValue(invite, "EVENT_DATE", "eventDate"),
     eventTime: getValue(invite, "EVENT_TIME", "eventTime"),
     eventLocation: getValue(invite, "EVENT_LOCATION", "eventLocation"),
@@ -28,12 +29,15 @@ async function sendInvitationEmail(invite, rsvpUrl) {
   if (!apiKey || !fromAddress) throw new Error("Email service is not configured");
   const details = invitationDetails(invite);
   const greeting = details.recipientFirstName ? `Hi ${escapeHtml(details.recipientFirstName)},` : "Hello,";
+  const descriptionHtml = details.eventDescription
+    ? `<p>${escapeHtml(details.eventDescription).replace(/\r?\n/g, "<br>")}</p>`
+    : "";
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from: `${fromName} <${fromAddress}>`, to: [details.recipientEmail], subject: `You're invited to ${details.eventTitle}`,
-      html: `<p>${greeting}</p><p>${escapeHtml(details.hostName)} invited you to <strong>${escapeHtml(details.eventTitle)}</strong>.</p><p>${escapeHtml(details.eventDate)} at ${escapeHtml(details.eventTime)}<br>${escapeHtml(details.eventLocation)}</p><p><a href="${escapeHtml(rsvpUrl)}">RSVP to this event</a></p><p>${escapeHtml(rsvpUrl)}</p>`
+      html: `<p>${greeting}</p><p>${escapeHtml(details.hostName)} invited you to <strong>${escapeHtml(details.eventTitle)}</strong>.</p>${descriptionHtml}<p>${escapeHtml(details.eventDate)} at ${escapeHtml(details.eventTime)}<br>${escapeHtml(details.eventLocation)}</p><p><a href="${escapeHtml(rsvpUrl)}">RSVP to this event</a></p><p>${escapeHtml(rsvpUrl)}</p>`
     })
   });
   const payload = await response.json().catch(() => ({}));

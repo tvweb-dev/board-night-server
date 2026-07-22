@@ -68,6 +68,7 @@ Idempotency-Key: catan-night-2026-07-15
 {
   "groupId": 1,
   "eventTitle": "Catan Night",
+  "eventDescription": "Bring your favourite strategy game.",
   "eventDate": "2026-07-15",
   "eventTime": "19:00:00",
   "eventLocation": "Library Room A"

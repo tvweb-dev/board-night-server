@@ -8,6 +8,7 @@ const statements = [
     IN p_group_id INT,
     IN p_host_id INT,
     IN p_event_title VARCHAR(255),
+    IN p_event_description VARCHAR(2000),
     IN p_event_date DATE,
     IN p_event_time TIME,
     IN p_event_location VARCHAR(255)
@@ -24,9 +25,9 @@ const statements = [
     START TRANSACTION;
 
     INSERT INTO events (
-      GROUP_ID, HOST_ID, EVENT_TITLE, EVENT_DATE, EVENT_TIME, EVENT_LOCATION
+      GROUP_ID, HOST_ID, EVENT_TITLE, EVENT_DESCRIPTION, EVENT_DATE, EVENT_TIME, EVENT_LOCATION
     ) VALUES (
-      p_group_id, p_host_id, p_event_title, p_event_date, p_event_time, p_event_location
+      p_group_id, p_host_id, p_event_title, p_event_description, p_event_date, p_event_time, p_event_location
     );
 
     SET v_event_id = LAST_INSERT_ID();

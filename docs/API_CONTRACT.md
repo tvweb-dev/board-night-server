@@ -164,19 +164,22 @@ Body:
 ```json
 {
   "groupId": 1,
-  "eventTitle": "Catan Night",
-  "eventDate": "2026-07-15",
-  "eventTime": "19:00:00",
-  "eventLocation": "Library Room A"
+  "eventTitle": "Friday Game Night",
+  "eventDescription": "Bring your favourite strategy game.",
+  "eventDate": "2026-08-14",
+  "eventTime": "19:00",
+  "eventLocation": "123 Main Street"
 }
 ```
 
 Uses procedure:
 CreateEvent
 
+`eventDescription` is optional. Missing, null, or blank descriptions are stored as
+`NULL`; nonblank descriptions are trimmed and may contain at most 2000 characters.
 The procedure creates the event and the host's `GOING` RSVP atomically. The response
 contains the created record in both `event` and the legacy `data` field, including
-`HOST_RSVP_STATUS: "GOING"`. It does not send an invitation email.
+`EVENT_DESCRIPTION` and `HOST_RSVP_STATUS: "GOING"`. It does not send an invitation email.
 
 ### Get Group Events
 

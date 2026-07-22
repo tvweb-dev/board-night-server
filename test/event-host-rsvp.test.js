@@ -2,7 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createEventHandler } = require("../controllers/events.controller");
+const { createEventHandler, readGroupEventsHandler, unwrapProcedureResult } = require("../controllers/events.controller");
+const { createDatabase } = require("../data/board-night.db");
 
 function response() {
   return {
@@ -25,6 +26,7 @@ const eventBody = {
   groupId: 2,
   hostId: 999,
   eventTitle: "Catan Night",
+  eventDescription: "  Bring a strategy game.  ",
   eventDate: "2026-08-01",
   eventTime: "19:00:00",
   eventLocation: "Library"
@@ -36,7 +38,7 @@ test("creating an event uses the authenticated host and returns its GOING RSVP",
   const database = {
     async createEvent(...args) {
       argumentsReceived = args;
-      return { EVENT_ID: 123, HOST_ID: args[1], EVENT_STATUS: "SCHEDULED", HOST_RSVP_STATUS: "GOING" };
+      return { EVENT_ID: 123, HOST_ID: args[1], EVENT_TITLE: args[2], EVENT_DESCRIPTION: args[3], EVENT_STATUS: "ACTIVE", HOST_RSVP_STATUS: "GOING" };
     }
   };
   const handler = createEventHandler(database);
@@ -44,12 +46,98 @@ test("creating an event uses the authenticated host and returns its GOING RSVP",
 
   await handler(request(eventBody, 7), res);
 
-  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "2026-08-01", "19:00:00", "Library"]);
+  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "Bring a strategy game.", "2026-08-01", "19:00:00", "Library"]);
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.event.HOST_ID, 7);
   assert.equal(res.body.event.HOST_RSVP_STATUS, "GOING");
+  assert.equal(res.body.event.EVENT_DESCRIPTION, "Bring a strategy game.");
+  assert.equal(res.body.event.EVENT_STATUS, "ACTIVE");
   assert.deepEqual(res.body.data, res.body.event);
   assert.equal(emailCount, 0, "event creation must not invoke invitation email delivery");
+});
+
+for (const [name, description] of [
+  ["omitted", undefined],
+  ["null", null],
+  ["blank", "   "]
+]) test(`description may be ${name} and is stored as null`, async () => {
+  let descriptionReceived = "not-called";
+  const database = {
+    async createEvent(_groupId, _hostId, _title, normalizedDescription) {
+      descriptionReceived = normalizedDescription;
+      return { EVENT_ID: 124, EVENT_DESCRIPTION: normalizedDescription, EVENT_STATUS: "ACTIVE", HOST_RSVP_STATUS: "GOING" };
+    }
+  };
+  const handler = createEventHandler(database);
+  const body = { ...eventBody };
+  if (description === undefined) delete body.eventDescription;
+  else body.eventDescription = description;
+  const res = response();
+
+  await handler(request(body), res);
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(descriptionReceived, null);
+  assert.equal(res.body.event.EVENT_DESCRIPTION, null);
+});
+
+test("description longer than 2000 characters returns HTTP 400", async () => {
+  let createCalls = 0;
+  const handler = createEventHandler({ createEvent: async () => { createCalls += 1; } });
+  const res = response();
+
+  await handler(request({ ...eventBody, eventDescription: "x".repeat(2001) }), res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(createCalls, 0);
+});
+
+test("title, date, and time remain required", async () => {
+  const handler = createEventHandler({ createEvent: async () => assert.fail("database must not be called") });
+  for (const field of ["eventTitle", "eventDate", "eventTime"]) {
+    const body = { ...eventBody, [field]: "" };
+    const res = response();
+    await handler(request(body), res);
+    assert.equal(res.statusCode, 400);
+  }
+});
+
+test("database uses the seven-argument parameterized CreateEvent call and normalizes mysql2 rows", async () => {
+  let query;
+  let parameters;
+  const database = createDatabase({
+    async query(sql, values) {
+      query = sql;
+      parameters = values;
+      return [[[{ EVENT_ID: 10, EVENT_DESCRIPTION: "Description", EVENT_STATUS: "ACTIVE", HOST_RSVP_STATUS: "GOING" }], { affectedRows: 0 }]];
+    }
+  });
+
+  const event = await database.createEvent(1, 7, "Title", "Description", "2026-08-14", "19:00", "Address");
+
+  assert.equal(query, "CALL CreateEvent(?, ?, ?, ?, ?, ?, ?)");
+  assert.deepEqual(parameters, [1, 7, "Title", "Description", "2026-08-14", "19:00", "Address"]);
+  assert.equal(event.EVENT_DESCRIPTION, "Description");
+});
+
+test("event-reading result normalization preserves EVENT_DESCRIPTION", () => {
+  const rows = [[{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }], { affectedRows: 0 }];
+  assert.deepEqual(unwrapProcedureResult(rows), [{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }]);
+});
+
+test("group event API returns EVENT_DESCRIPTION", async () => {
+  const handler = readGroupEventsHandler({
+    async readGroupEvents(groupId) {
+      assert.equal(groupId, "2");
+      return [{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }];
+    }
+  });
+  const res = response();
+
+  await handler({ params: { groupId: "2" } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data[0].EVENT_DESCRIPTION, "Bring a game.");
 });
 
 test("host is immediately present in RSVP reads without a separate RSVP request", async () => {

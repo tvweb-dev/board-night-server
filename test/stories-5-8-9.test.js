@@ -119,3 +119,32 @@ test("failed email records FAILED and never exposes credentials", async () => {
   assert.doesNotMatch(updates.at(-1)[4], /super-secret-provider-key/);
   assert.doesNotMatch(JSON.stringify(res.body), /super-secret-provider-key/);
 });
+
+test("invitation email includes an escaped event description when present", async () => {
+  const emailService = require("../services/email.service");
+  const originalFetch = global.fetch;
+  const originalApiKey = process.env.EMAIL_API_KEY;
+  const originalFromAddress = process.env.EMAIL_FROM_ADDRESS;
+  let requestBody;
+  process.env.EMAIL_API_KEY = "test-key";
+  process.env.EMAIL_FROM_ADDRESS = "invites@example.com";
+  global.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ id: "msg_description" }) };
+  };
+
+  try {
+    await emailService.sendInvitationEmail(invite({
+      EVENT_DESCRIPTION: "Bring <script>alert('x')</script> & snacks."
+    }), "https://board-night.example/rsvp?event=9");
+  } finally {
+    global.fetch = originalFetch;
+    if (originalApiKey == null) delete process.env.EMAIL_API_KEY;
+    else process.env.EMAIL_API_KEY = originalApiKey;
+    if (originalFromAddress == null) delete process.env.EMAIL_FROM_ADDRESS;
+    else process.env.EMAIL_FROM_ADDRESS = originalFromAddress;
+  }
+
+  assert.match(requestBody.html, /Bring &lt;script&gt;alert\(&#39;x&#39;\)&lt;\/script&gt; &amp; snacks\./);
+  assert.doesNotMatch(requestBody.html, /<script>/i);
+});

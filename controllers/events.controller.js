@@ -31,10 +31,22 @@ function createEventHandler(database = DB, options = {}) {
   const deduplicationWindowMs = options.deduplicationWindowMs || 2000;
 
   return async function createEvent(req, res) {
-    const { groupId, eventTitle, eventDate, eventTime, eventLocation } = req.body || {};
+    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation } = req.body || {};
     const hostId = req.auth.userId;
+    if (!eventTitle || !eventDate || !eventTime) {
+      return res.status(400).json({ success: false, message: "Event title, date, and time are required" });
+    }
+    if (eventDescription != null && typeof eventDescription !== "string") {
+      return res.status(400).json({ success: false, message: "Event description must be text" });
+    }
+    const normalizedDescription = eventDescription == null || eventDescription.trim() === ""
+      ? null
+      : eventDescription.trim();
+    if (normalizedDescription && normalizedDescription.length > 2000) {
+      return res.status(400).json({ success: false, message: "Event description cannot exceed 2000 characters" });
+    }
     const suppliedKey = String(req.get && req.get("idempotency-key") || "").trim();
-    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, eventDate, eventTime, eventLocation]);
+    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation]);
     const now = Date.now();
     const existing = submissions.get(fingerprint);
     const isDuplicate = Boolean(existing && now - existing.createdAt < deduplicationWindowMs);
@@ -44,7 +56,7 @@ function createEventHandler(database = DB, options = {}) {
       if (isDuplicate) {
         eventPromise = existing.eventPromise;
       } else {
-        eventPromise = database.createEvent(groupId, hostId, eventTitle, eventDate, eventTime, eventLocation);
+        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation);
         submissions.set(fingerprint, { createdAt: now, eventPromise });
         const cleanup = setTimeout(() => submissions.delete(fingerprint), deduplicationWindowMs);
         if (cleanup.unref) cleanup.unref();
@@ -66,21 +78,22 @@ function createEventHandler(database = DB, options = {}) {
 
 const createEvent = createEventHandler();
 
-async function readGroupEvents(req, res) {
-  try {
-    const { groupId } = req.params;
-
-    const [rows] = await pool.query("CALL ReadGroupEvents(?)", [groupId]);
-
-    res.json({
-      success: true,
-      message: "Group events loaded successfully",
-      data: unwrapProcedureResult(rows)
-    });
-  } catch (error) {
-    handleDbError(res, error);
-  }
+function readGroupEventsHandler(database = DB) {
+  return async function readGroupEvents(req, res) {
+    try {
+      const data = await database.readGroupEvents(req.params.groupId);
+      return res.json({
+        success: true,
+        message: "Group events loaded successfully",
+        data
+      });
+    } catch (error) {
+      return handleDbError(res, error);
+    }
+  };
 }
+
+const readGroupEvents = readGroupEventsHandler();
 
 async function readEventRSVPs(req, res) {
   try {
@@ -142,5 +155,7 @@ module.exports = {
   cancelEvent: storyHandlers.cancelEvent,
   changeHost: storyHandlers.changeHost,
   createStoryHandlers,
-  createEventHandler
+  createEventHandler,
+  readGroupEventsHandler,
+  unwrapProcedureResult
 };
