@@ -1,4 +1,6 @@
 const { pool } = require("../config/database");
+const { DB } = require("../data/board-night.db");
+const { sendDatabaseError } = require("../utils/http-errors");
 
 function unwrapProcedureResult(rows) {
   return rows && rows[0] ? rows[0] : [];
@@ -86,9 +88,48 @@ async function readEventRSVPs(req, res) {
   }
 }
 
+function validId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function createStoryHandlers(database = DB) {
+  return {
+    async cancelEvent(req, res) {
+      const eventId = validId(req.params.eventId);
+      if (!eventId) return res.status(400).json({ success: false, message: "A valid event ID is required" });
+      try {
+        const event = await database.cancelEvent(eventId, req.auth.userId);
+        if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+        return res.json({ success: true, message: "Event cancelled successfully", event });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to cancel event");
+      }
+    },
+
+    async changeHost(req, res) {
+      const eventId = validId(req.params.eventId);
+      const newHostId = validId(req.body && req.body.newHostId);
+      if (!eventId || !newHostId) return res.status(400).json({ success: false, message: "Valid event and new host IDs are required" });
+      try {
+        const event = await database.changeHost(eventId, req.auth.userId, newHostId);
+        if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+        return res.json({ success: true, message: "Event host changed successfully", event });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to change event host");
+      }
+    }
+  };
+}
+
+const storyHandlers = createStoryHandlers();
+
 module.exports = {
   listEvents,
   createEvent,
   readGroupEvents,
-  readEventRSVPs
+  readEventRSVPs,
+  cancelEvent: storyHandlers.cancelEvent,
+  changeHost: storyHandlers.changeHost,
+  createStoryHandlers
 };

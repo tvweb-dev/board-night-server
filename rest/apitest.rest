@@ -1,4 +1,5 @@
 @baseUrl = http://localhost:3000
+@authToken = paste-login-token-here
 
 ### Health check
 GET {{baseUrl}}/health
@@ -166,4 +167,29 @@ Content-Type: application/json
 {
   "userId": 1,
   "gameId": 1
+}
+### Login and copy data.token below
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+  "email": "host@test.com",
+  "password": "password123"
+}
+
+### Send invitation email (Story 5)
+POST {{baseUrl}}/api/invites/1/send-email
+Authorization: Bearer {{authToken}}
+
+### Cancel event (Story 8)
+PATCH {{baseUrl}}/api/events/1/cancel
+Authorization: Bearer {{authToken}}
+
+### Change event host (Story 9)
+PATCH {{baseUrl}}/api/events/1/host
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "newHostId": 12
 }

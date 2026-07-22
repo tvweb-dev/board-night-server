@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const { signToken } = require("../middleware/auth");
 
 function unwrapProcedureResult(rows) {
   return rows && rows[0] ? rows[0] : [];
@@ -52,10 +53,14 @@ async function loginUser(req, res) {
       password
     ]);
 
+    const user = getFirstResult(rows);
+    if (!user) return res.status(401).json({ success: false, message: "Invalid email or password" });
+    user.token = signToken(user.USER_ID);
+
     res.json({
       success: true,
       message: "Login successful",
-      data: getFirstResult(rows)
+      data: user
     });
   } catch (error) {
     handleDbError(res, error, 401);

@@ -1,4 +1,7 @@
 const { pool } = require("../config/database");
+const { DB } = require("../data/board-night.db");
+const emailService = require("../services/email.service");
+const { sendDatabaseError } = require("../utils/http-errors");
 
 function getFirstResult(rows) {
   const result = rows && rows[0] ? rows[0] : [];
@@ -58,8 +61,59 @@ async function updateRSVP(req, res) {
   }
 }
 
+function createEmailHandler(database = DB, mailer = emailService) {
+  return async function sendInviteEmail(req, res) {
+    const inviteId = Number(req.params.inviteId);
+    if (!Number.isInteger(inviteId) || inviteId < 1) return res.status(400).json({ success: false, message: "A valid invitation ID is required" });
+
+    let invite;
+    try {
+      invite = await database.readInviteForEmail(inviteId, req.auth.userId);
+      if (!invite) return res.status(404).json({ success: false, message: "Invitation not found" });
+    } catch (error) {
+      return sendDatabaseError(res, error, "Unable to load invitation");
+    }
+
+    const details = mailer.invitationDetails(invite);
+    if (["CANCELLED", "COMPLETED"].includes(details.eventStatus)) {
+      return res.status(409).json({ success: false, message: `Cannot email an invitation for a ${details.eventStatus.toLowerCase()} event` });
+    }
+
+    try {
+      await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENDING", null, null);
+      const baseUrl = String(process.env.FRONTEND_BASE_URL || "").replace(/\/$/, "");
+      if (!baseUrl) throw new Error("Frontend URL is not configured");
+      const rsvpUrl = `${baseUrl}/rsvp.html?event=${encodeURIComponent(details.eventId)}`;
+      const sent = await mailer.sendInvitationEmail(invite, rsvpUrl);
+      const updated = await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENT", sent.messageId, null);
+      return res.json({
+        success: true,
+        message: "Invitation email sent successfully",
+        inviteId,
+        emailStatus: "SENT",
+        emailSentAt: updated && (updated.EMAIL_SENT_AT || updated.emailSentAt) || new Date().toISOString(),
+        recipientEmail: details.recipientEmail
+      });
+    } catch (error) {
+      const credential = process.env.EMAIL_API_KEY;
+      const rawError = String(error.message || "Email delivery failed");
+      const safeError = (credential ? rawError.split(credential).join("[redacted]") : rawError).slice(0, 240);
+      try {
+        await database.updateInviteEmailStatus(inviteId, req.auth.userId, "FAILED", null, safeError);
+      } catch (statusError) {
+        // Preserve the original delivery error; neither error is exposed verbatim.
+      }
+      return res.status(502).json({ success: false, message: "Invitation email could not be sent" });
+    }
+  };
+}
+
+const sendInviteEmail = createEmailHandler();
+
 module.exports = {
   listInvites,
   createInvite,
-  updateRSVP
+  updateRSVP,
+  sendInviteEmail,
+  createEmailHandler
 };
