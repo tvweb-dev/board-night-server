@@ -5,7 +5,7 @@ const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
 
 router.get("/", eventsController.listEvents);
-router.post("/", eventsController.createEvent);
+router.post("/", requireAuth, eventsController.createEvent);
 router.get("/group/:groupId", eventsController.readGroupEvents);
 router.get("/:eventId/rsvps", eventsController.readEventRSVPs);
 router.patch("/:eventId/cancel", requireAuth, eventsController.cancelEvent);

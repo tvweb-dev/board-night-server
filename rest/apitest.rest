@@ -62,10 +62,11 @@ GET {{baseUrl}}/api/groups/1/members
 ### Create event
 POST {{baseUrl}}/api/events
 Content-Type: application/json
+Authorization: Bearer {{authToken}}
+Idempotency-Key: catan-night-2026-07-15
 
 {
   "groupId": 1,
-  "hostId": 1,
   "eventTitle": "Catan Night",
   "eventDate": "2026-07-15",
   "eventTime": "19:00:00",

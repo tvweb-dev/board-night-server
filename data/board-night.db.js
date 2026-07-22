@@ -10,6 +10,12 @@ function firstProcedureRow(rows) {
 }
 
 const DB = {
+  async createEvent(groupId, hostId, eventTitle, eventDate, eventTime, eventLocation) {
+    const [rows] = await pool.query("CALL CreateEvent(?, ?, ?, ?, ?, ?)", [
+      groupId, hostId, eventTitle, eventDate, eventTime, eventLocation
+    ]);
+    return firstProcedureRow(rows);
+  },
   async readInviteForEmail(inviteId, requestingUserId) {
     const [rows] = await pool.query("CALL ReadInviteForEmail(?, ?)", [inviteId, requestingUserId]);
     return firstProcedureRow(rows);

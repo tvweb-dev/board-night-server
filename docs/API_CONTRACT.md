@@ -155,12 +155,15 @@ ReadGroupMembers
 
 POST /api/events
 
+Requires `Authorization: Bearer <token>`. The authenticated user becomes the host;
+any `hostId` in the request body is ignored. An optional `Idempotency-Key` header can
+be supplied by the frontend to safely retry the same creation request.
+
 Body:
 
 ```json
 {
   "groupId": 1,
-  "hostId": 1,
   "eventTitle": "Catan Night",
   "eventDate": "2026-07-15",
   "eventTime": "19:00:00",
@@ -170,6 +173,10 @@ Body:
 
 Uses procedure:
 CreateEvent
+
+The procedure creates the event and the host's `GOING` RSVP atomically. The response
+contains the created record in both `event` and the legacy `data` field, including
+`HOST_RSVP_STATUS: "GOING"`. It does not send an invitation email.
 
 ### Get Group Events
 

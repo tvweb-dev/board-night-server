@@ -26,35 +26,45 @@ async function listEvents(req, res) {
   });
 }
 
-async function createEvent(req, res) {
-  try {
-    const {
-      groupId,
-      hostId,
-      eventTitle,
-      eventDate,
-      eventTime,
-      eventLocation
-    } = req.body;
+function createEventHandler(database = DB, options = {}) {
+  const submissions = new Map();
+  const deduplicationWindowMs = options.deduplicationWindowMs || 2000;
 
-    const [rows] = await pool.query("CALL CreateEvent(?, ?, ?, ?, ?, ?)", [
-      groupId,
-      hostId,
-      eventTitle,
-      eventDate,
-      eventTime,
-      eventLocation
-    ]);
+  return async function createEvent(req, res) {
+    const { groupId, eventTitle, eventDate, eventTime, eventLocation } = req.body || {};
+    const hostId = req.auth.userId;
+    const suppliedKey = String(req.get && req.get("idempotency-key") || "").trim();
+    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, eventDate, eventTime, eventLocation]);
+    const now = Date.now();
+    const existing = submissions.get(fingerprint);
+    const isDuplicate = Boolean(existing && now - existing.createdAt < deduplicationWindowMs);
 
-    res.status(201).json({
-      success: true,
-      message: "Event created successfully",
-      data: getFirstResult(rows)
-    });
-  } catch (error) {
-    handleDbError(res, error);
-  }
+    try {
+      let eventPromise;
+      if (isDuplicate) {
+        eventPromise = existing.eventPromise;
+      } else {
+        eventPromise = database.createEvent(groupId, hostId, eventTitle, eventDate, eventTime, eventLocation);
+        submissions.set(fingerprint, { createdAt: now, eventPromise });
+        const cleanup = setTimeout(() => submissions.delete(fingerprint), deduplicationWindowMs);
+        if (cleanup.unref) cleanup.unref();
+      }
+
+      const event = await eventPromise;
+      return res.status(isDuplicate ? 200 : 201).json({
+        success: true,
+        message: "Event created successfully",
+        event,
+        data: event
+      });
+    } catch (error) {
+      submissions.delete(fingerprint);
+      return handleDbError(res, error);
+    }
+  };
 }
+
+const createEvent = createEventHandler();
 
 async function readGroupEvents(req, res) {
   try {
@@ -131,5 +141,6 @@ module.exports = {
   readEventRSVPs,
   cancelEvent: storyHandlers.cancelEvent,
   changeHost: storyHandlers.changeHost,
-  createStoryHandlers
+  createStoryHandlers,
+  createEventHandler
 };
