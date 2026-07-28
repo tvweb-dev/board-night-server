@@ -29,6 +29,16 @@ function createDatabase(connection = pool) {
       const [rows] = await connection.query("CALL UpdateInviteEmailStatus(?, ?, ?, ?, ?)", [inviteId, requestingUserId, emailStatus, messageId, errorMessage]);
       return firstProcedureRow(rows);
     },
+    async readInviteEmailStatus(inviteId, requestingUserId) {
+      const [rows] = await connection.query("CALL ReadInviteEmailStatus(?, ?)", [inviteId, requestingUserId]);
+      return firstProcedureRow(rows);
+    },
+    async updateInviteEmailDetails(inviteId, requestingUserId, emailStatus, emailSentAt, messageId, errorMessage) {
+      const [rows] = await connection.query("CALL UpdateInviteEmailDetails(?, ?, ?, ?, ?, ?)", [
+        inviteId, requestingUserId, emailStatus, emailSentAt, messageId, errorMessage
+      ]);
+      return firstProcedureRow(rows);
+    },
     async cancelEvent(eventId, requestingUserId) {
       const [rows] = await connection.query("CALL CancelEvent(?, ?)", [eventId, requestingUserId]);
       return firstProcedureRow(rows);
