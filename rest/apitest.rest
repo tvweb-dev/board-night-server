@@ -183,6 +183,22 @@ Content-Type: application/json
 POST {{baseUrl}}/api/invites/1/send-email
 Authorization: Bearer {{authToken}}
 
+### Read invitation email status
+GET {{baseUrl}}/api/invites/1/email-status
+Authorization: Bearer {{authToken}}
+
+### Update invitation email status
+PUT {{baseUrl}}/api/invites/1/email-status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "emailStatus": "SENT",
+  "emailSentAt": "2026-07-28T20:00:00Z",
+  "emailMessageId": "provider-message-id",
+  "emailError": null
+}
+
 ### Cancel event (Story 8)
 PATCH {{baseUrl}}/api/events/1/cancel
 Authorization: Bearer {{authToken}}

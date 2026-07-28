@@ -110,10 +110,68 @@ function createEmailHandler(database = DB, mailer = emailService) {
 
 const sendInviteEmail = createEmailHandler();
 
+const EMAIL_STATUSES = new Set(["NOT_SENT", "SENDING", "SENT", "FAILED"]);
+
+function validInviteId(value) {
+  const inviteId = Number(value);
+  return Number.isInteger(inviteId) && inviteId > 0 ? inviteId : null;
+}
+
+function emailDetailsHandler(database = DB) {
+  return {
+    async read(req, res) {
+      const inviteId = validInviteId(req.params.inviteId);
+      if (!inviteId) return res.status(400).json({ success: false, message: "A valid invitation ID is required" });
+
+      try {
+        const data = await database.readInviteEmailStatus(inviteId, req.auth.userId);
+        if (!data) return res.status(404).json({ success: false, message: "Invitation not found" });
+        return res.json({ success: true, message: "Invitation email status retrieved successfully", data });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to read invitation email status");
+      }
+    },
+
+    async update(req, res) {
+      const inviteId = validInviteId(req.params.inviteId);
+      if (!inviteId) return res.status(400).json({ success: false, message: "A valid invitation ID is required" });
+
+      const { emailStatus, emailSentAt = null, emailMessageId = null, emailError = null } = req.body || {};
+      if (!EMAIL_STATUSES.has(emailStatus)) {
+        return res.status(400).json({ success: false, message: "emailStatus must be NOT_SENT, SENDING, SENT, or FAILED" });
+      }
+      if (emailSentAt !== null && (typeof emailSentAt !== "string" || Number.isNaN(Date.parse(emailSentAt)))) {
+        return res.status(400).json({ success: false, message: "emailSentAt must be a valid date/time or null" });
+      }
+      if (emailMessageId !== null && (typeof emailMessageId !== "string" || emailMessageId.length > 255)) {
+        return res.status(400).json({ success: false, message: "emailMessageId must be a string of at most 255 characters or null" });
+      }
+      if (emailError !== null && (typeof emailError !== "string" || emailError.length > 2000)) {
+        return res.status(400).json({ success: false, message: "emailError must be a string of at most 2000 characters or null" });
+      }
+
+      try {
+        const data = await database.updateInviteEmailDetails(
+          inviteId, req.auth.userId, emailStatus, emailSentAt, emailMessageId, emailError
+        );
+        if (!data) return res.status(404).json({ success: false, message: "Invitation not found" });
+        return res.json({ success: true, message: "Invitation email status updated successfully", data });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to update invitation email status");
+      }
+    }
+  };
+}
+
+const emailDetails = emailDetailsHandler();
+
 module.exports = {
   listInvites,
   createInvite,
   updateRSVP,
   sendInviteEmail,
-  createEmailHandler
+  createEmailHandler,
+  readEmailDetails: emailDetails.read,
+  updateEmailDetails: emailDetails.update,
+  emailDetailsHandler
 };

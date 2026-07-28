@@ -234,3 +234,38 @@ Body:
 
 Uses procedure:
 UpdateRSVP
+
+### Read Invite Email Status
+
+GET /api/invites/1/email-status
+
+Requires `Authorization: Bearer <token>`. Only the event's current host may read it.
+
+Uses procedure:
+ReadInviteEmailStatus
+
+Returns `INVITE_ID`, `EMAIL_STATUS`, `EMAIL_SENT_AT`, `EMAIL_MESSAGE_ID`, and
+`EMAIL_ERROR`.
+
+### Update Invite Email Status
+
+PUT /api/invites/1/email-status
+
+Requires `Authorization: Bearer <token>`. Only the event's current host may update it.
+
+Body:
+
+```json
+{
+  "emailStatus": "SENT",
+  "emailSentAt": "2026-07-28T20:00:00Z",
+  "emailMessageId": "provider-message-id",
+  "emailError": null
+}
+```
+
+Allowed statuses are `NOT_SENT`, `SENDING`, `SENT`, and `FAILED`. The other three
+fields may be `null`.
+
+Uses procedure:
+UpdateInviteEmailDetails
