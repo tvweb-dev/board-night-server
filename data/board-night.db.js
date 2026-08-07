@@ -48,6 +48,16 @@ function createDatabase(connection = pool) {
       const [rows] = await connection.query("SELECT * FROM events WHERE EVENT_ID = ?", [eventId]);
       return rows[0] || null;
     },
+    async updateEventImage(eventId, requestingUserId, eventImageUrl) {
+      const [result] = await connection.query(
+        `UPDATE events SET EVENT_IMAGE_URL = ?
+          WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')`,
+        [eventImageUrl, eventId, requestingUserId]
+      );
+      if (!result.affectedRows) return null;
+      const [rows] = await connection.query("SELECT EVENT_ID, EVENT_IMAGE_URL FROM events WHERE EVENT_ID = ?", [eventId]);
+      return rows[0] || null;
+    },
     async readInviteForEmail(inviteId, requestingUserId) {
       const [rows] = await connection.query("CALL ReadInviteForEmail(?, ?)", [inviteId, requestingUserId]);
       return firstProcedureRow(rows);

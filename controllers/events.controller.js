@@ -179,6 +179,20 @@ function createStoryHandlers(database = DB) {
       } catch (error) {
         return sendDatabaseError(res, error, "Unable to change event host");
       }
+    },
+    async updateEventImage(req, res) {
+      const eventId = validId(req.params.eventId);
+      if (!eventId) return res.status(400).json({ success: false, message: "A valid event ID is required" });
+      let imageUrl;
+      try { imageUrl = normalizeImageUrl(req.body && req.body.eventImageUrl, "eventImageUrl"); }
+      catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+      try {
+        const event = await database.updateEventImage(eventId, req.auth.userId, imageUrl);
+        if (!event) return res.status(403).json({ success: false, message: "Only the current event host can update the event image" });
+        return res.json({ success: true, message: "Event image updated successfully", event, data: event });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to update event image");
+      }
     }
   };
 }
@@ -193,6 +207,7 @@ module.exports = {
   cancelEvent: storyHandlers.cancelEvent,
   changeHost: storyHandlers.changeHost,
   updateEvent: storyHandlers.updateEvent,
+  updateEventImage: storyHandlers.updateEventImage,
   createStoryHandlers,
   createEventHandler,
   readGroupEventsHandler,

@@ -29,6 +29,14 @@ test("event image updates remain scoped to the authenticated host", async () => 
   assert.deepEqual(calls[0][1].slice(-3), ["https://example.com/event.jpg", 4, 7]);
 });
 
+test("dedicated event image update is host-scoped", async () => {
+  const calls = [];
+  const database = createDatabase({ async query(sql, params) { calls.push([sql, params]); return sql.startsWith("UPDATE") ? [{ affectedRows: 1 }] : [[{ EVENT_ID: 4, EVENT_IMAGE_URL: params[0] }]]; } });
+  await database.updateEventImage(4, 7, "https://example.com/new-event.jpg");
+  assert.match(calls[0][0], /HOST_ID = \?/);
+  assert.deepEqual(calls[0][1], ["https://example.com/new-event.jpg", 4, 7]);
+});
+
 test("only the group creator can update a group image", async () => {
   let params;
   const handler = updateGroupImageHandler({ async query(_sql, values) { params = values; return [{ affectedRows: 0 }]; } });
