@@ -11,6 +11,7 @@ const invitesRoutes = require("./routes/invites.routes");
 const profilesRoutes = require("./routes/profiles.routes");
 const gamesRoutes = require("./routes/games.routes");
 const notificationsRoutes = require("./routes/notifications.routes");
+const friendsRoutes = require("./routes/friends.routes");
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use("/api/invites", invitesRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/friends", friendsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
