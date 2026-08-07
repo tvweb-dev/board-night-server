@@ -96,12 +96,21 @@ async function readGroupMembers(req, res) {
   try {
     const { groupId } = req.params;
 
-    const [rows] = await pool.query("CALL ReadGroupMembers(?)", [groupId]);
+    const [rows] = await pool.query(
+      `SELECT gm.*, u.EMAIL, up.FIRST_NAME, up.LAST_NAME, up.NICKNAME, up.IMAGE_URL
+         FROM group_members gm
+         JOIN users u ON u.USER_ID = gm.USER_ID
+         LEFT JOIN user_profile up ON up.USER_ID = gm.USER_ID
+        WHERE gm.GROUP_ID = ?
+        ORDER BY CASE WHEN gm.MEMBER_ROLE = 'HOST' THEN 0 ELSE 1 END,
+                 COALESCE(up.NICKNAME, up.FIRST_NAME, u.EMAIL)`,
+      [groupId]
+    );
 
     res.json({
       success: true,
       message: "Group members loaded successfully",
-      data: unwrapProcedureResult(rows)
+      data: rows
     });
   } catch (error) {
     handleDbError(res, error);

@@ -20,10 +20,13 @@ function createDatabase(connection = pool) {
     async readGroupEvents(groupId) {
       const [rows] = await connection.query(
         `SELECT e.EVENT_ID, e.GROUP_ID, e.HOST_ID, u.EMAIL AS HOST_EMAIL,
+                up.NICKNAME AS HOST_NICKNAME, up.FIRST_NAME AS HOST_FIRST_NAME,
+                up.LAST_NAME AS HOST_LAST_NAME, up.IMAGE_URL AS HOST_IMAGE_URL,
                 e.EVENT_TITLE, e.EVENT_DESCRIPTION, e.EVENT_DATE, e.EVENT_TIME,
                 e.EVENT_LOCATION, e.EVENT_STATUS, e.CREATED_AT
          FROM events e
          JOIN users u ON u.USER_ID = e.HOST_ID
+         LEFT JOIN user_profile up ON up.USER_ID = e.HOST_ID
          WHERE e.GROUP_ID = ?
          ORDER BY e.EVENT_DATE, e.EVENT_TIME`,
         [groupId]

@@ -99,12 +99,20 @@ async function readEventRSVPs(req, res) {
   try {
     const { eventId } = req.params;
 
-    const [rows] = await pool.query("CALL ReadEventRSVPs(?)", [eventId]);
+    const [rows] = await pool.query(
+      `SELECT ei.*, u.EMAIL, up.FIRST_NAME, up.LAST_NAME, up.NICKNAME, up.IMAGE_URL
+         FROM event_invites ei
+         JOIN users u ON u.USER_ID = ei.USER_ID
+         LEFT JOIN user_profile up ON up.USER_ID = ei.USER_ID
+        WHERE ei.EVENT_ID = ?
+        ORDER BY ei.UPDATED_AT DESC, ei.INVITE_ID`,
+      [eventId]
+    );
 
     res.json({
       success: true,
       message: "Event RSVPs loaded successfully",
-      data: unwrapProcedureResult(rows)
+      data: rows
     });
   } catch (error) {
     handleDbError(res, error);
