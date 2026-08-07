@@ -11,7 +11,16 @@ function firstProcedureRow(rows) {
 
 function createDatabase(connection = pool) {
   return {
-    async createEvent(groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl) {
+    async createEvent(groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, rehostedFromEventId = null) {
+      if (rehostedFromEventId) {
+        const [sources] = await connection.query(
+          `SELECT EVENT_ID, GROUP_ID FROM events
+            WHERE EVENT_ID = ? AND HOST_ID = ? AND GROUP_ID = ?
+              AND (EVENT_STATUS IN ('CANCELED', 'CANCELLED', 'COMPLETED') OR TIMESTAMP(EVENT_DATE, EVENT_TIME) <= NOW())`,
+          [rehostedFromEventId, hostId, groupId]
+        );
+        if (!sources.length) throw new Error("Only the original host can rehost a past or cancelled event in the same group");
+      }
       const [rows] = await connection.query("CALL CreateEvent(?, ?, ?, ?, ?, ?, ?)", [
         groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation
       ]);
@@ -19,6 +28,10 @@ function createDatabase(connection = pool) {
       if (event && eventImageUrl) {
         await connection.query("UPDATE events SET EVENT_IMAGE_URL = ? WHERE EVENT_ID = ? AND HOST_ID = ?", [eventImageUrl, event.EVENT_ID, hostId]);
         event.EVENT_IMAGE_URL = eventImageUrl;
+      }
+      if (event && rehostedFromEventId) {
+        await connection.query("UPDATE events SET REHOSTED_FROM_EVENT_ID = ? WHERE EVENT_ID = ? AND HOST_ID = ?", [rehostedFromEventId, event.EVENT_ID, hostId]);
+        event.REHOSTED_FROM_EVENT_ID = rehostedFromEventId;
       }
       return event;
     },
@@ -28,7 +41,13 @@ function createDatabase(connection = pool) {
                 up.NICKNAME AS HOST_NICKNAME, up.FIRST_NAME AS HOST_FIRST_NAME,
                 up.LAST_NAME AS HOST_LAST_NAME, up.IMAGE_URL AS HOST_IMAGE_URL,
                 e.EVENT_TITLE, e.EVENT_DESCRIPTION, e.EVENT_DATE, e.EVENT_TIME,
-                e.EVENT_LOCATION, e.EVENT_IMAGE_URL, e.EVENT_STATUS, e.CREATED_AT
+                e.EVENT_LOCATION, e.EVENT_IMAGE_URL, e.REHOSTED_FROM_EVENT_ID,
+                e.EVENT_STATUS, e.CREATED_AT,
+                CASE
+                  WHEN e.EVENT_STATUS IN ('CANCELED', 'CANCELLED') THEN 'CANCELED'
+                  WHEN e.EVENT_STATUS = 'COMPLETED' OR TIMESTAMP(e.EVENT_DATE, e.EVENT_TIME) <= NOW() THEN 'PAST'
+                  ELSE 'UPCOMING'
+                END AS DISPLAY_STATUS
          FROM events e
          JOIN users u ON u.USER_ID = e.HOST_ID
          LEFT JOIN user_profile up ON up.USER_ID = e.HOST_ID
@@ -41,7 +60,8 @@ function createDatabase(connection = pool) {
     async updateEvent(eventId, requestingUserId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl) {
       const [result] = await connection.query(
         `UPDATE events SET EVENT_TITLE = ?, EVENT_DESCRIPTION = ?, EVENT_DATE = ?, EVENT_TIME = ?, EVENT_LOCATION = ?, EVENT_IMAGE_URL = ?
-         WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')`,
+         WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')
+           AND TIMESTAMP(EVENT_DATE, EVENT_TIME) > NOW()`,
         [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, eventId, requestingUserId]
       );
       if (!result.affectedRows) return null;
@@ -51,7 +71,8 @@ function createDatabase(connection = pool) {
     async updateEventImage(eventId, requestingUserId, eventImageUrl) {
       const [result] = await connection.query(
         `UPDATE events SET EVENT_IMAGE_URL = ?
-          WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')`,
+          WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')
+            AND TIMESTAMP(EVENT_DATE, EVENT_TIME) > NOW()`,
         [eventImageUrl, eventId, requestingUserId]
       );
       if (!result.affectedRows) return null;

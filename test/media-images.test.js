@@ -13,11 +13,13 @@ test("event and group image URLs accept HTTP(S) and reject unsafe protocols", ()
   assert.throws(() => normalizeImageUrl("javascript:alert(1)", "image"), /HTTP\(S\)/);
 });
 
-test("media schema adds both image columns when missing", async () => {
+test("media schema adds image columns and the rehost relationship when missing", async () => {
   const statements = [];
   await ensureMediaSchema({ async query(sql, params) { statements.push([sql, params]); return sql.includes("information_schema") ? [[]] : [{ affectedRows: 0 }]; } });
   assert.match(statements[1][0], /EVENT_IMAGE_URL/);
   assert.match(statements[3][0], /GROUP_IMAGE_URL/);
+  assert.match(statements[5][0], /REHOSTED_FROM_EVENT_ID/);
+  assert.match(statements[5][0], /INT NULL/);
 });
 
 test("event image updates remain scoped to the authenticated host", async () => {

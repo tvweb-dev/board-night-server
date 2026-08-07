@@ -70,7 +70,11 @@ async function updateRSVP(req, res) {
     }
 
     const [result] = await pool.query(
-      "UPDATE event_invites SET RSVP_STATUS = ?, UPDATED_AT = NOW() WHERE INVITE_ID = ? AND USER_ID = ?",
+      `UPDATE event_invites ei JOIN events e ON e.EVENT_ID = ei.EVENT_ID
+          SET ei.RSVP_STATUS = ?, ei.UPDATED_AT = NOW()
+        WHERE ei.INVITE_ID = ? AND ei.USER_ID = ?
+          AND e.EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')
+          AND TIMESTAMP(e.EVENT_DATE, e.EVENT_TIME) > NOW()`,
       [rsvpStatus, normalizedInviteId, req.auth.userId]
     );
     if (!result.affectedRows) return res.status(403).json({ success: false, message: "Invitation not found or belongs to another user" });

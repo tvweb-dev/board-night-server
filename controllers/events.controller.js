@@ -32,7 +32,7 @@ function createEventHandler(database = DB, options = {}) {
   const deduplicationWindowMs = options.deduplicationWindowMs || 2000;
 
   return async function createEvent(req, res) {
-    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl } = req.body || {};
+    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, rehostedFromEventId } = req.body || {};
     const hostId = req.auth.userId;
     if (!eventTitle || !eventDate || !eventTime) {
       return res.status(400).json({ success: false, message: "Event title, date, and time are required" });
@@ -49,8 +49,13 @@ function createEventHandler(database = DB, options = {}) {
     let normalizedImageUrl;
     try { normalizedImageUrl = normalizeImageUrl(eventImageUrl, "eventImageUrl"); }
     catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+    const sourceEventId = rehostedFromEventId == null ? null : validId(rehostedFromEventId);
+    if (rehostedFromEventId != null && !sourceEventId) return res.status(400).json({ success: false, message: "A valid source event ID is required" });
+    if (sourceEventId && new Date(`${eventDate}T${eventTime}`) <= new Date()) {
+      return res.status(400).json({ success: false, message: "A rehosted event must use an upcoming date and time" });
+    }
     const suppliedKey = String(req.get && req.get("idempotency-key") || "").trim();
-    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl]);
+    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId]);
     const now = Date.now();
     const existing = submissions.get(fingerprint);
     const isDuplicate = Boolean(existing && now - existing.createdAt < deduplicationWindowMs);
@@ -60,7 +65,7 @@ function createEventHandler(database = DB, options = {}) {
       if (isDuplicate) {
         eventPromise = existing.eventPromise;
       } else {
-        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl);
+        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId);
         submissions.set(fingerprint, { createdAt: now, eventPromise });
         const cleanup = setTimeout(() => submissions.delete(fingerprint), deduplicationWindowMs);
         if (cleanup.unref) cleanup.unref();

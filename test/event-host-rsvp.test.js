@@ -46,7 +46,7 @@ test("creating an event uses the authenticated host and returns its GOING RSVP",
 
   await handler(request(eventBody, 7), res);
 
-  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "Bring a strategy game.", "2026-08-01", "19:00:00", "Library", null]);
+  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "Bring a strategy game.", "2026-08-01", "19:00:00", "Library", null, null]);
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.event.HOST_ID, 7);
   assert.equal(res.body.event.HOST_RSVP_STATUS, "GOING");
@@ -148,8 +148,41 @@ test("database group-event query includes descriptions without relying on an out
   } });
   const events = await database.readGroupEvents(2);
   assert.match(call[0], /EVENT_DESCRIPTION/);
+  assert.match(call[0], /REHOSTED_FROM_EVENT_ID/);
+  assert.match(call[0], /AS DISPLAY_STATUS/);
   assert.deepEqual(call[1], [2]);
   assert.equal(events[0].EVENT_DESCRIPTION, "Bring a game.");
+});
+
+test("rehosting validates the original event and stores its database relationship", async () => {
+  const calls = [];
+  const database = createDatabase({ async query(sql, values) {
+    calls.push([sql, values]);
+    if (sql.includes("SELECT EVENT_ID, GROUP_ID FROM events")) return [[{ EVENT_ID: 9, GROUP_ID: 2 }]];
+    if (sql.startsWith("CALL")) return [[[{ EVENT_ID: 10, HOST_ID: 7 }], { affectedRows: 0 }]];
+    return [{ affectedRows: 1 }];
+  } });
+
+  const event = await database.createEvent(2, 7, "Again", null, "2026-09-01", "19:00", "Hall", null, 9);
+
+  assert.deepEqual(calls[0][1], [9, 7, 2]);
+  assert.match(calls[0][0], /TIMESTAMP\(EVENT_DATE, EVENT_TIME\) <= NOW\(\)/);
+  assert.deepEqual(calls[2][1], [9, 10, 7]);
+  assert.equal(event.REHOSTED_FROM_EVENT_ID, 9);
+});
+
+test("rehost creation passes the source event through the controller", async () => {
+  let sourceId;
+  const handler = createEventHandler({ async createEvent(...args) {
+    sourceId = args[8];
+    return { EVENT_ID: 10, HOST_RSVP_STATUS: "GOING" };
+  } });
+  const res = response();
+
+  await handler(request({ ...eventBody, eventDate: "2099-09-01", rehostedFromEventId: 9 }), res);
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(sourceId, 9);
 });
 
 test("database event update is host-scoped and returns the saved row", async () => {
