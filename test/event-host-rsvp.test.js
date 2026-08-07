@@ -140,6 +140,31 @@ test("group event API returns EVENT_DESCRIPTION", async () => {
   assert.equal(res.body.data[0].EVENT_DESCRIPTION, "Bring a game.");
 });
 
+test("database group-event query includes descriptions without relying on an outdated procedure", async () => {
+  let call;
+  const database = createDatabase({ async query(sql, values) {
+    call = [sql, values];
+    return [[{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }]];
+  } });
+  const events = await database.readGroupEvents(2);
+  assert.match(call[0], /EVENT_DESCRIPTION/);
+  assert.deepEqual(call[1], [2]);
+  assert.equal(events[0].EVENT_DESCRIPTION, "Bring a game.");
+});
+
+test("database event update is host-scoped and returns the saved row", async () => {
+  const calls = [];
+  const database = createDatabase({ async query(sql, values) {
+    calls.push([sql, values]);
+    if (sql.startsWith("UPDATE")) return [{ affectedRows: 1 }];
+    return [[{ EVENT_ID: 4, EVENT_TITLE: "Updated" }]];
+  } });
+  const event = await database.updateEvent(4, 7, "Updated", null, "2026-09-01", "19:00", "Hall");
+  assert.match(calls[0][0], /HOST_ID = \?/);
+  assert.deepEqual(calls[0][1], ["Updated", null, "2026-09-01", "19:00", "Hall", 4, 7]);
+  assert.equal(event.EVENT_TITLE, "Updated");
+});
+
 test("host is immediately present in RSVP reads without a separate RSVP request", async () => {
   const rsvps = [];
   let rsvpUpdateCalls = 0;

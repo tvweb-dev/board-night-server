@@ -34,6 +34,29 @@ test("current host can cancel before start", async () => {
   assert.equal(res.body.event.EVENT_STATUS, "CANCELLED");
 });
 
+test("current host can update an event", async () => {
+  let args;
+  const handlers = createStoryHandlers({ updateEvent: async (...values) => {
+    args = values;
+    return { EVENT_ID: values[0], EVENT_TITLE: values[2], EVENT_DESCRIPTION: values[3] };
+  } });
+  const res = response();
+  await handlers.updateEvent(req({ eventId: "4" }, {
+    eventTitle: " Catan Night ", eventDescription: " Bring snacks ", eventDate: "2026-09-01",
+    eventTime: "19:00", eventLocation: " Community Hall "
+  }, 7), res);
+  assert.deepEqual(args, [4, 7, "Catan Night", "Bring snacks", "2026-09-01", "19:00", "Community Hall"]);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.EVENT_DESCRIPTION, "Bring snacks");
+});
+
+test("event update requires title, date, time, and location", async () => {
+  const handlers = createStoryHandlers({ updateEvent: async () => assert.fail("database must not be called") });
+  const res = response();
+  await handlers.updateEvent(req({ eventId: "4" }, { eventTitle: "Catan", eventDate: "2026-09-01", eventLocation: "Hall" }), res);
+  assert.equal(res.statusCode, 400);
+});
+
 for (const [name, message, status] of [
   ["non-host cannot cancel", "Requesting user is not the current host", 403],
   ["event cannot be cancelled after start", "Event already started", 409],
@@ -83,7 +106,7 @@ test("current host can send invitation and records SENT with timestamp", async (
   };
   const mailer = {
     invitationDetails: require("../services/email.service").invitationDetails,
-    sendInvitationEmail: async (_invite, url) => { assert.equal(url, "https://board-night.example/rsvp.html?event=9"); return { messageId: "msg_123" }; }
+    sendInvitationEmail: async (_invite, url) => { assert.equal(url, "https://board-night.example/rsvp.html?event=9&invite=3"); return { messageId: "msg_123" }; }
   };
   const res = response();
   await createEmailHandler(database, mailer)(req({ inviteId: "3" }), res);

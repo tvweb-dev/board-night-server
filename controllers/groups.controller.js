@@ -26,7 +26,8 @@ async function listGroups(req, res) {
 
 async function createGroup(req, res) {
   try {
-    const { groupName, createdBy } = req.body;
+    const { groupName } = req.body;
+    const createdBy = req.auth.userId;
 
     const [rows] = await pool.query("CALL CreateGroup(?, ?)", [
       groupName,
@@ -62,6 +63,13 @@ async function readUserGroups(req, res) {
 async function addGroupMember(req, res) {
   try {
     const { groupId, userId, memberRole } = req.body;
+    const [ownedGroups] = await pool.query(
+      "SELECT GROUP_ID FROM `groups` WHERE GROUP_ID = ? AND CREATED_BY = ?",
+      [groupId, req.auth.userId]
+    );
+    if (!ownedGroups.length) {
+      return res.status(403).json({ success: false, message: "Only the group host can add members" });
+    }
 
     const [rows] = await pool.query("CALL AddGroupMember(?, ?, ?)", [
       groupId,

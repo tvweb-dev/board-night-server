@@ -27,15 +27,25 @@ async function createInvite(req, res) {
   try {
     const { eventId, userId } = req.body;
 
-    const [rows] = await pool.query("CALL CreateInvite(?, ?)", [
-      eventId,
-      userId
-    ]);
+    const [allowed] = await pool.query(
+      `SELECT e.EVENT_ID FROM events e
+       JOIN group_members gm ON gm.GROUP_ID = e.GROUP_ID AND gm.USER_ID = ?
+       WHERE e.EVENT_ID = ? AND e.HOST_ID = ?`,
+      [userId, eventId, req.auth.userId]
+    );
+    if (!allowed.length) return res.status(403).json({ success: false, message: "Only the host can invite group members" });
+    await pool.query(
+      `INSERT INTO event_invites (EVENT_ID, USER_ID, RSVP_STATUS, UPDATED_AT)
+       SELECT ?, ?, 'PENDING', NOW()
+       WHERE NOT EXISTS (SELECT 1 FROM event_invites WHERE EVENT_ID = ? AND USER_ID = ?)`,
+      [eventId, userId, eventId, userId]
+    );
+    const [rows] = await pool.query("SELECT * FROM event_invites WHERE EVENT_ID = ? AND USER_ID = ?", [eventId, userId]);
 
     res.status(201).json({
       success: true,
       message: "Invite created successfully",
-      data: getFirstResult(rows)
+      data: rows[0] || null
     });
   } catch (error) {
     handleDbError(res, error);
@@ -45,16 +55,25 @@ async function createInvite(req, res) {
 async function updateRSVP(req, res) {
   try {
     const { inviteId, rsvpStatus } = req.body;
+    const normalizedInviteId = Number(inviteId);
+    if (!Number.isInteger(normalizedInviteId) || normalizedInviteId < 1) {
+      return res.status(400).json({ success: false, message: "A valid invitation ID is required" });
+    }
+    if (!["GOING", "MAYBE", "NOT_GOING", "PENDING"].includes(rsvpStatus)) {
+      return res.status(400).json({ success: false, message: "Invalid RSVP status" });
+    }
 
-    const [rows] = await pool.query("CALL UpdateRSVP(?, ?)", [
-      inviteId,
-      rsvpStatus
-    ]);
+    const [result] = await pool.query(
+      "UPDATE event_invites SET RSVP_STATUS = ?, UPDATED_AT = NOW() WHERE INVITE_ID = ? AND USER_ID = ?",
+      [rsvpStatus, normalizedInviteId, req.auth.userId]
+    );
+    if (!result.affectedRows) return res.status(403).json({ success: false, message: "Invitation not found or belongs to another user" });
+    const [rows] = await pool.query("SELECT * FROM event_invites WHERE INVITE_ID = ?", [normalizedInviteId]);
 
     res.json({
       success: true,
       message: "RSVP updated successfully",
-      data: getFirstResult(rows)
+      data: rows[0] || null
     });
   } catch (error) {
     handleDbError(res, error);
@@ -75,7 +94,7 @@ function createEmailHandler(database = DB, mailer = emailService) {
     }
 
     const details = mailer.invitationDetails(invite);
-    if (["CANCELLED", "COMPLETED"].includes(details.eventStatus)) {
+    if (["CANCELED", "CANCELLED", "COMPLETED"].includes(details.eventStatus)) {
       return res.status(409).json({ success: false, message: `Cannot email an invitation for a ${details.eventStatus.toLowerCase()} event` });
     }
 
@@ -83,7 +102,7 @@ function createEmailHandler(database = DB, mailer = emailService) {
       await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENDING", null, null);
       const baseUrl = String(process.env.FRONTEND_BASE_URL || "").replace(/\/$/, "");
       if (!baseUrl) throw new Error("Frontend URL is not configured");
-      const rsvpUrl = `${baseUrl}/rsvp.html?event=${encodeURIComponent(details.eventId)}`;
+      const rsvpUrl = `${baseUrl}/rsvp.html?event=${encodeURIComponent(details.eventId)}&invite=${encodeURIComponent(inviteId)}`;
       const sent = await mailer.sendInvitationEmail(invite, rsvpUrl);
       const updated = await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENT", sent.messageId, null);
       return res.json({

@@ -118,6 +118,29 @@ function validId(value) {
 
 function createStoryHandlers(database = DB) {
   return {
+    async updateEvent(req, res) {
+      const eventId = validId(req.params.eventId);
+      const { eventTitle, eventDescription, eventDate, eventTime, eventLocation } = req.body || {};
+      if (!eventId || !eventTitle || !eventDate || !eventTime || !eventLocation) {
+        return res.status(400).json({ success: false, message: "Event title, date, time, and location are required" });
+      }
+      if (eventDescription != null && typeof eventDescription !== "string") {
+        return res.status(400).json({ success: false, message: "Event description must be text" });
+      }
+      const description = eventDescription == null || eventDescription.trim() === "" ? null : eventDescription.trim();
+      if (description && description.length > 2000) {
+        return res.status(400).json({ success: false, message: "Event description cannot exceed 2000 characters" });
+      }
+      try {
+        const event = await database.updateEvent(
+          eventId, req.auth.userId, eventTitle.trim(), description, eventDate, eventTime, eventLocation.trim()
+        );
+        if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+        return res.json({ success: true, message: "Event updated successfully", event, data: event });
+      } catch (error) {
+        return sendDatabaseError(res, error, "Unable to update event");
+      }
+    },
     async cancelEvent(req, res) {
       const eventId = validId(req.params.eventId);
       if (!eventId) return res.status(400).json({ success: false, message: "A valid event ID is required" });
@@ -154,6 +177,7 @@ module.exports = {
   readEventRSVPs,
   cancelEvent: storyHandlers.cancelEvent,
   changeHost: storyHandlers.changeHost,
+  updateEvent: storyHandlers.updateEvent,
   createStoryHandlers,
   createEventHandler,
   readGroupEventsHandler,
