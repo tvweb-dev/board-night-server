@@ -8,7 +8,8 @@
   "dev": "nodemon server.js",
   "test": "node --test",
   "db:install:event-host-rsvp": "node scripts/install-event-host-rsvp-procedure.js",
-  "db:install:invite-email-status": "node scripts/install-invite-email-status-procedures.js"
+  "db:install:invite-email-status": "node scripts/install-invite-email-status-procedures.js",
+  "db:install:notifications": "node scripts/install-notifications.js"
 },
   "dependencies": {
     "cors": "^2.8.6",

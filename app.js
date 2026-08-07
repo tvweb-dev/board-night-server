@@ -10,6 +10,7 @@ const eventsRoutes = require("./routes/events.routes");
 const invitesRoutes = require("./routes/invites.routes");
 const profilesRoutes = require("./routes/profiles.routes");
 const gamesRoutes = require("./routes/games.routes");
+const notificationsRoutes = require("./routes/notifications.routes");
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use("/api/events", eventsRoutes);
 app.use("/api/invites", invitesRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use("/api/games", gamesRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

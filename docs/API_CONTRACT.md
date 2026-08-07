@@ -235,6 +235,24 @@ Body:
 Uses procedure:
 UpdateRSVP
 
+Updating an RSVP creates an in-app notification for the responding user and every
+other member of the event's group. Status text is rendered as going, maybe going,
+not going, or pending.
+
+## Notifications
+
+All notification endpoints require a bearer token. Adding a group member notifies
+that member, and creating a new event invite notifies the invitee.
+
+```text
+GET /api/notifications
+GET /api/notifications?unread=true
+PATCH /api/notifications/:notificationId/read
+PATCH /api/notifications/read-all
+```
+
+Run `npm run db:install:notifications` once per database before using these endpoints.
+
 ### Read Invite Email Status
 
 GET /api/invites/1/email-status

@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const notifications = require("../services/notification.service");
 
 function unwrapProcedureResult(rows) {
   return rows && rows[0] ? rows[0] : [];
@@ -76,6 +77,10 @@ async function addGroupMember(req, res) {
       userId,
       memberRole || "MEMBER"
     ]);
+
+    await notifications.notifyGroupMemberAdded(pool, {
+      userId: Number(userId), groupId: Number(groupId), actorUserId: req.auth.userId
+    });
 
     res.status(201).json({
       success: true,

@@ -2,6 +2,7 @@ const { pool } = require("../config/database");
 const { DB } = require("../data/board-night.db");
 const emailService = require("../services/email.service");
 const { sendDatabaseError } = require("../utils/http-errors");
+const notifications = require("../services/notification.service");
 
 function getFirstResult(rows) {
   const result = rows && rows[0] ? rows[0] : [];
@@ -34,12 +35,17 @@ async function createInvite(req, res) {
       [userId, eventId, req.auth.userId]
     );
     if (!allowed.length) return res.status(403).json({ success: false, message: "Only the host can invite group members" });
-    await pool.query(
+    const [insertResult] = await pool.query(
       `INSERT INTO event_invites (EVENT_ID, USER_ID, RSVP_STATUS, UPDATED_AT)
        SELECT ?, ?, 'PENDING', NOW()
        WHERE NOT EXISTS (SELECT 1 FROM event_invites WHERE EVENT_ID = ? AND USER_ID = ?)`,
       [eventId, userId, eventId, userId]
     );
+    if (insertResult.affectedRows) {
+      await notifications.notifyEventInvite(pool, {
+        userId: Number(userId), eventId: Number(eventId), actorUserId: req.auth.userId
+      });
+    }
     const [rows] = await pool.query("SELECT * FROM event_invites WHERE EVENT_ID = ? AND USER_ID = ?", [eventId, userId]);
 
     res.status(201).json({
@@ -68,6 +74,9 @@ async function updateRSVP(req, res) {
       [rsvpStatus, normalizedInviteId, req.auth.userId]
     );
     if (!result.affectedRows) return res.status(403).json({ success: false, message: "Invitation not found or belongs to another user" });
+    await notifications.notifyRsvpChanged(pool, {
+      inviteId: normalizedInviteId, actorUserId: req.auth.userId, rsvpStatus
+    });
     const [rows] = await pool.query("SELECT * FROM event_invites WHERE INVITE_ID = ?", [normalizedInviteId]);
 
     res.json({
