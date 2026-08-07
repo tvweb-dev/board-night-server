@@ -28,6 +28,9 @@ async function listUsers(req, res) {
 async function createUser(req, res) {
   try {
     const { email, password } = req.body;
+    if (String(email || "").trim().toLowerCase().endsWith("@board-night.local")) {
+      return res.status(400).json({ success: false, message: "This email domain is reserved and cannot be registered" });
+    }
 
     const [rows] = await pool.query("CALL CreateUser(?, ?)", [
       email,

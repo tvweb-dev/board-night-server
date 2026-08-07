@@ -93,10 +93,13 @@ function updateGroupImageHandler(database = pool) {
 
 const updateGroupImage = updateGroupImageHandler();
 
-async function addGroupMember(req, res) {
+function addGroupMemberHandler(database = pool, notificationService = notifications) {
+  return async function addGroupMember(req, res) {
   try {
-    const { groupId, userId, memberRole } = req.body;
-    const [ownedGroups] = await pool.query(
+    const { groupId, userId, memberQuery, memberRole } = req.body || {};
+    const lookup = String(memberQuery ?? userId ?? "").trim();
+    if (!lookup) return res.status(400).json({ success: false, message: "Enter an existing user ID, email, nickname, or full name" });
+    const [ownedGroups] = await database.query(
       "SELECT GROUP_ID FROM `groups` WHERE GROUP_ID = ? AND CREATED_BY = ?",
       [groupId, req.auth.userId]
     );
@@ -104,14 +107,30 @@ async function addGroupMember(req, res) {
       return res.status(403).json({ success: false, message: "Only the group host can add members" });
     }
 
-    const [rows] = await pool.query("CALL AddGroupMember(?, ?, ?)", [
+    const numericUserId = /^\d+$/.test(lookup) ? Number(lookup) : null;
+    const [matchedUsers] = numericUserId
+      ? await database.query("SELECT USER_ID FROM users WHERE USER_ID = ?", [numericUserId])
+      : await database.query(
+        `SELECT u.USER_ID FROM users u
+          LEFT JOIN user_profile up ON up.USER_ID = u.USER_ID
+         WHERE LOWER(u.EMAIL) = LOWER(?)
+            OR LOWER(up.NICKNAME) = LOWER(?)
+            OR LOWER(TRIM(CONCAT_WS(' ', up.FIRST_NAME, up.LAST_NAME))) = LOWER(?)
+         LIMIT 2`,
+        [lookup, lookup, lookup]
+      );
+    if (!matchedUsers.length) return res.status(404).json({ success: false, message: "No existing user matches that ID, email, nickname, or name" });
+    if (matchedUsers.length > 1) return res.status(409).json({ success: false, message: "More than one user has that display name. Use their email or user ID" });
+    const resolvedUserId = Number(matchedUsers[0].USER_ID);
+
+    const [rows] = await database.query("CALL AddGroupMember(?, ?, ?)", [
       groupId,
-      userId,
+      resolvedUserId,
       memberRole || "MEMBER"
     ]);
 
-    await notifications.notifyGroupMemberAdded(pool, {
-      userId: Number(userId), groupId: Number(groupId), actorUserId: req.auth.userId
+    await notificationService.notifyGroupMemberAdded(database, {
+      userId: resolvedUserId, groupId: Number(groupId), actorUserId: req.auth.userId
     });
 
     res.status(201).json({
@@ -122,7 +141,10 @@ async function addGroupMember(req, res) {
   } catch (error) {
     handleDbError(res, error);
   }
+  };
 }
+
+const addGroupMember = addGroupMemberHandler();
 
 async function readGroupMembers(req, res) {
   try {
@@ -154,6 +176,7 @@ module.exports = {
   createGroup,
   readUserGroups,
   addGroupMember,
+  addGroupMemberHandler,
   readGroupMembers,
   updateGroupImage,
   updateGroupImageHandler
