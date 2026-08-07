@@ -19,13 +19,18 @@ function handleDbError(res, error, statusCode = 400) {
   });
 }
 
-async function listEvents(req, res) {
-  res.json({
-    success: true,
-    message: "Events endpoint ready",
-    data: []
-  });
+function listEventsHandler(database = DB) {
+  return async function listEvents(req, res) {
+    try {
+      const data = await database.readUserEvents(req.auth.userId);
+      return res.json({ success: true, message: "Your events loaded successfully", data });
+    } catch (error) {
+      return handleDbError(res, error);
+    }
+  };
 }
+
+const listEvents = listEventsHandler();
 
 function createEventHandler(database = DB, options = {}) {
   const submissions = new Map();
@@ -216,5 +221,6 @@ module.exports = {
   createStoryHandlers,
   createEventHandler,
   readGroupEventsHandler,
+  listEventsHandler,
   unwrapProcedureResult
 };

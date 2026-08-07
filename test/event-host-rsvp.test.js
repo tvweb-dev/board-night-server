@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createEventHandler, readGroupEventsHandler, unwrapProcedureResult } = require("../controllers/events.controller");
+const { createEventHandler, readGroupEventsHandler, listEventsHandler, unwrapProcedureResult } = require("../controllers/events.controller");
 const { createDatabase } = require("../data/board-night.db");
 
 function response() {
@@ -152,6 +152,35 @@ test("database group-event query includes descriptions without relying on an out
   assert.match(call[0], /AS DISPLAY_STATUS/);
   assert.deepEqual(call[1], [2]);
   assert.equal(events[0].EVENT_DESCRIPTION, "Bring a game.");
+});
+
+test("user event feed contains only hosted or individually invited events", async () => {
+  let call;
+  const database = createDatabase({ async query(sql, values) {
+    call = [sql, values];
+    return [[{ EVENT_ID: 12, GROUP_NAME: "Night Games" }]];
+  } });
+
+  const events = await database.readUserEvents(7);
+
+  assert.match(call[0], /mine\.USER_ID = \?/);
+  assert.match(call[0], /e\.HOST_ID = \? OR mine\.INVITE_ID IS NOT NULL/);
+  assert.deepEqual(call[1], [7, 7]);
+  assert.equal(events[0].EVENT_ID, 12);
+});
+
+test("event feed uses the authenticated user ID", async () => {
+  let requestedUserId;
+  const handler = listEventsHandler({ async readUserEvents(userId) {
+    requestedUserId = userId;
+    return [{ EVENT_ID: 12 }];
+  } });
+  const res = response();
+
+  await handler({ auth: { userId: 7 } }, res);
+
+  assert.equal(requestedUserId, 7);
+  assert.equal(res.body.data[0].EVENT_ID, 12);
 });
 
 test("rehosting validates the original event and stores its database relationship", async () => {

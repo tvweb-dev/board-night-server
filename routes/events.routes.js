@@ -4,7 +4,7 @@ const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
-router.get("/", eventsController.listEvents);
+router.get("/", requireAuth, eventsController.listEvents);
 router.post("/", requireAuth, eventsController.createEvent);
 router.get("/group/:groupId", eventsController.readGroupEvents);
 router.get("/:eventId/rsvps", eventsController.readEventRSVPs);

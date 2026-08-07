@@ -57,6 +57,30 @@ function createDatabase(connection = pool) {
       );
       return rows;
     },
+    async readUserEvents(userId) {
+      const [rows] = await connection.query(
+        `SELECT e.EVENT_ID, e.GROUP_ID, e.HOST_ID, g.GROUP_NAME, u.EMAIL AS HOST_EMAIL,
+                up.NICKNAME AS HOST_NICKNAME, up.FIRST_NAME AS HOST_FIRST_NAME,
+                up.LAST_NAME AS HOST_LAST_NAME, up.IMAGE_URL AS HOST_IMAGE_URL,
+                e.EVENT_TITLE, e.EVENT_DESCRIPTION, e.EVENT_DATE, e.EVENT_TIME,
+                e.EVENT_LOCATION, e.EVENT_IMAGE_URL, e.REHOSTED_FROM_EVENT_ID,
+                e.EVENT_STATUS, e.CREATED_AT,
+                CASE
+                  WHEN e.EVENT_STATUS IN ('CANCELED', 'CANCELLED') THEN 'CANCELED'
+                  WHEN e.EVENT_STATUS = 'COMPLETED' OR TIMESTAMP(e.EVENT_DATE, e.EVENT_TIME) <= NOW() THEN 'PAST'
+                  ELSE 'UPCOMING'
+                END AS DISPLAY_STATUS
+           FROM events e
+           JOIN \`groups\` g ON g.GROUP_ID = e.GROUP_ID
+           JOIN users u ON u.USER_ID = e.HOST_ID
+           LEFT JOIN user_profile up ON up.USER_ID = e.HOST_ID
+           LEFT JOIN event_invites mine ON mine.EVENT_ID = e.EVENT_ID AND mine.USER_ID = ?
+          WHERE e.HOST_ID = ? OR mine.INVITE_ID IS NOT NULL
+          ORDER BY e.EVENT_DATE, e.EVENT_TIME`,
+        [userId, userId]
+      );
+      return rows;
+    },
     async updateEvent(eventId, requestingUserId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl) {
       const [result] = await connection.query(
         `UPDATE events SET EVENT_TITLE = ?, EVENT_DESCRIPTION = ?, EVENT_DATE = ?, EVENT_TIME = ?, EVENT_LOCATION = ?, EVENT_IMAGE_URL = ?
