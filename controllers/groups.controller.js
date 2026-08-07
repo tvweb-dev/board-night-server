@@ -1,5 +1,6 @@
 const { pool } = require("../config/database");
 const notifications = require("../services/notification.service");
+const { normalizeImageUrl } = require("../utils/image-url");
 
 function unwrapProcedureResult(rows) {
   return rows && rows[0] ? rows[0] : [];
@@ -27,18 +28,24 @@ async function listGroups(req, res) {
 
 async function createGroup(req, res) {
   try {
-    const { groupName } = req.body;
+    const { groupName, groupImageUrl } = req.body;
     const createdBy = req.auth.userId;
+    const imageUrl = normalizeImageUrl(groupImageUrl, "groupImageUrl");
 
     const [rows] = await pool.query("CALL CreateGroup(?, ?)", [
       groupName,
       createdBy
     ]);
 
+    const group = getFirstResult(rows);
+    if (group && imageUrl) {
+      await pool.query("UPDATE `groups` SET GROUP_IMAGE_URL = ? WHERE GROUP_ID = ? AND CREATED_BY = ?", [imageUrl, group.GROUP_ID, createdBy]);
+      group.GROUP_IMAGE_URL = imageUrl;
+    }
     res.status(201).json({
       success: true,
       message: "Group created successfully",
-      data: getFirstResult(rows)
+      data: group
     });
   } catch (error) {
     handleDbError(res, error);
@@ -49,17 +56,42 @@ async function readUserGroups(req, res) {
   try {
     const { userId } = req.params;
 
-    const [rows] = await pool.query("CALL ReadUserGroups(?)", [userId]);
+    const [rows] = await pool.query(
+      `SELECT g.*, gm.MEMBER_ROLE
+         FROM group_members gm JOIN \`groups\` g ON g.GROUP_ID = gm.GROUP_ID
+        WHERE gm.USER_ID = ? ORDER BY g.GROUP_NAME`,
+      [userId]
+    );
 
     res.json({
       success: true,
       message: "User groups loaded successfully",
-      data: unwrapProcedureResult(rows)
+      data: rows
     });
   } catch (error) {
     handleDbError(res, error);
   }
 }
+
+function updateGroupImageHandler(database = pool) {
+  return async function updateGroupImage(req, res) {
+    const groupId = Number(req.params.groupId);
+    if (!Number.isInteger(groupId) || groupId < 1) return res.status(400).json({ success: false, message: "A valid group ID is required" });
+    try {
+      const imageUrl = normalizeImageUrl(req.body && req.body.groupImageUrl, "groupImageUrl");
+      const [result] = await database.query(
+        "UPDATE `groups` SET GROUP_IMAGE_URL = ? WHERE GROUP_ID = ? AND CREATED_BY = ?",
+        [imageUrl, groupId, req.auth.userId]
+      );
+      if (!result.affectedRows) return res.status(403).json({ success: false, message: "Only the group creator can update the group image" });
+      return res.json({ success: true, message: "Group image updated successfully", data: { GROUP_ID: groupId, GROUP_IMAGE_URL: imageUrl } });
+    } catch (error) {
+      return handleDbError(res, error);
+    }
+  };
+}
+
+const updateGroupImage = updateGroupImageHandler();
 
 async function addGroupMember(req, res) {
   try {
@@ -122,5 +154,7 @@ module.exports = {
   createGroup,
   readUserGroups,
   addGroupMember,
-  readGroupMembers
+  readGroupMembers,
+  updateGroupImage,
+  updateGroupImageHandler
 };

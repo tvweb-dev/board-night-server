@@ -11,11 +11,16 @@ function firstProcedureRow(rows) {
 
 function createDatabase(connection = pool) {
   return {
-    async createEvent(groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation) {
+    async createEvent(groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl) {
       const [rows] = await connection.query("CALL CreateEvent(?, ?, ?, ?, ?, ?, ?)", [
         groupId, hostId, eventTitle, eventDescription, eventDate, eventTime, eventLocation
       ]);
-      return firstProcedureRow(rows);
+      const event = firstProcedureRow(rows);
+      if (event && eventImageUrl) {
+        await connection.query("UPDATE events SET EVENT_IMAGE_URL = ? WHERE EVENT_ID = ? AND HOST_ID = ?", [eventImageUrl, event.EVENT_ID, hostId]);
+        event.EVENT_IMAGE_URL = eventImageUrl;
+      }
+      return event;
     },
     async readGroupEvents(groupId) {
       const [rows] = await connection.query(
@@ -23,7 +28,7 @@ function createDatabase(connection = pool) {
                 up.NICKNAME AS HOST_NICKNAME, up.FIRST_NAME AS HOST_FIRST_NAME,
                 up.LAST_NAME AS HOST_LAST_NAME, up.IMAGE_URL AS HOST_IMAGE_URL,
                 e.EVENT_TITLE, e.EVENT_DESCRIPTION, e.EVENT_DATE, e.EVENT_TIME,
-                e.EVENT_LOCATION, e.EVENT_STATUS, e.CREATED_AT
+                e.EVENT_LOCATION, e.EVENT_IMAGE_URL, e.EVENT_STATUS, e.CREATED_AT
          FROM events e
          JOIN users u ON u.USER_ID = e.HOST_ID
          LEFT JOIN user_profile up ON up.USER_ID = e.HOST_ID
@@ -33,11 +38,11 @@ function createDatabase(connection = pool) {
       );
       return rows;
     },
-    async updateEvent(eventId, requestingUserId, eventTitle, eventDescription, eventDate, eventTime, eventLocation) {
+    async updateEvent(eventId, requestingUserId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl) {
       const [result] = await connection.query(
-        `UPDATE events SET EVENT_TITLE = ?, EVENT_DESCRIPTION = ?, EVENT_DATE = ?, EVENT_TIME = ?, EVENT_LOCATION = ?
+        `UPDATE events SET EVENT_TITLE = ?, EVENT_DESCRIPTION = ?, EVENT_DATE = ?, EVENT_TIME = ?, EVENT_LOCATION = ?, EVENT_IMAGE_URL = ?
          WHERE EVENT_ID = ? AND HOST_ID = ? AND EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')`,
-        [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventId, requestingUserId]
+        [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, eventId, requestingUserId]
       );
       if (!result.affectedRows) return null;
       const [rows] = await connection.query("SELECT * FROM events WHERE EVENT_ID = ?", [eventId]);

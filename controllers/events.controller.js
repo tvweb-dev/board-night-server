@@ -1,6 +1,7 @@
 const { pool } = require("../config/database");
 const { DB } = require("../data/board-night.db");
 const { sendDatabaseError } = require("../utils/http-errors");
+const { normalizeImageUrl } = require("../utils/image-url");
 
 function unwrapProcedureResult(rows) {
   return rows && rows[0] ? rows[0] : [];
@@ -31,7 +32,7 @@ function createEventHandler(database = DB, options = {}) {
   const deduplicationWindowMs = options.deduplicationWindowMs || 2000;
 
   return async function createEvent(req, res) {
-    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation } = req.body || {};
+    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl } = req.body || {};
     const hostId = req.auth.userId;
     if (!eventTitle || !eventDate || !eventTime) {
       return res.status(400).json({ success: false, message: "Event title, date, and time are required" });
@@ -45,8 +46,11 @@ function createEventHandler(database = DB, options = {}) {
     if (normalizedDescription && normalizedDescription.length > 2000) {
       return res.status(400).json({ success: false, message: "Event description cannot exceed 2000 characters" });
     }
+    let normalizedImageUrl;
+    try { normalizedImageUrl = normalizeImageUrl(eventImageUrl, "eventImageUrl"); }
+    catch (error) { return res.status(400).json({ success: false, message: error.message }); }
     const suppliedKey = String(req.get && req.get("idempotency-key") || "").trim();
-    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation]);
+    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl]);
     const now = Date.now();
     const existing = submissions.get(fingerprint);
     const isDuplicate = Boolean(existing && now - existing.createdAt < deduplicationWindowMs);
@@ -56,7 +60,7 @@ function createEventHandler(database = DB, options = {}) {
       if (isDuplicate) {
         eventPromise = existing.eventPromise;
       } else {
-        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation);
+        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl);
         submissions.set(fingerprint, { createdAt: now, eventPromise });
         const cleanup = setTimeout(() => submissions.delete(fingerprint), deduplicationWindowMs);
         if (cleanup.unref) cleanup.unref();
@@ -128,7 +132,7 @@ function createStoryHandlers(database = DB) {
   return {
     async updateEvent(req, res) {
       const eventId = validId(req.params.eventId);
-      const { eventTitle, eventDescription, eventDate, eventTime, eventLocation } = req.body || {};
+      const { eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl } = req.body || {};
       if (!eventId || !eventTitle || !eventDate || !eventTime || !eventLocation) {
         return res.status(400).json({ success: false, message: "Event title, date, time, and location are required" });
       }
@@ -139,9 +143,12 @@ function createStoryHandlers(database = DB) {
       if (description && description.length > 2000) {
         return res.status(400).json({ success: false, message: "Event description cannot exceed 2000 characters" });
       }
+      let imageUrl;
+      try { imageUrl = normalizeImageUrl(eventImageUrl, "eventImageUrl"); }
+      catch (error) { return res.status(400).json({ success: false, message: error.message }); }
       try {
         const event = await database.updateEvent(
-          eventId, req.auth.userId, eventTitle.trim(), description, eventDate, eventTime, eventLocation.trim()
+          eventId, req.auth.userId, eventTitle.trim(), description, eventDate, eventTime, eventLocation.trim(), imageUrl
         );
         if (!event) return res.status(404).json({ success: false, message: "Event not found" });
         return res.json({ success: true, message: "Event updated successfully", event, data: event });

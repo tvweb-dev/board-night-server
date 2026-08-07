@@ -46,7 +46,7 @@ test("creating an event uses the authenticated host and returns its GOING RSVP",
 
   await handler(request(eventBody, 7), res);
 
-  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "Bring a strategy game.", "2026-08-01", "19:00:00", "Library"]);
+  assert.deepEqual(argumentsReceived, [2, 7, "Catan Night", "Bring a strategy game.", "2026-08-01", "19:00:00", "Library", null]);
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.event.HOST_ID, 7);
   assert.equal(res.body.event.HOST_RSVP_STATUS, "GOING");
@@ -159,9 +159,9 @@ test("database event update is host-scoped and returns the saved row", async () 
     if (sql.startsWith("UPDATE")) return [{ affectedRows: 1 }];
     return [[{ EVENT_ID: 4, EVENT_TITLE: "Updated" }]];
   } });
-  const event = await database.updateEvent(4, 7, "Updated", null, "2026-09-01", "19:00", "Hall");
+  const event = await database.updateEvent(4, 7, "Updated", null, "2026-09-01", "19:00", "Hall", null);
   assert.match(calls[0][0], /HOST_ID = \?/);
-  assert.deepEqual(calls[0][1], ["Updated", null, "2026-09-01", "19:00", "Hall", 4, 7]);
+  assert.deepEqual(calls[0][1], ["Updated", null, "2026-09-01", "19:00", "Hall", null, 4, 7]);
   assert.equal(event.EVENT_TITLE, "Updated");
 });
 

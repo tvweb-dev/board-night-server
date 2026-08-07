@@ -45,7 +45,7 @@ test("current host can update an event", async () => {
     eventTitle: " Catan Night ", eventDescription: " Bring snacks ", eventDate: "2026-09-01",
     eventTime: "19:00", eventLocation: " Community Hall "
   }, 7), res);
-  assert.deepEqual(args, [4, 7, "Catan Night", "Bring snacks", "2026-09-01", "19:00", "Community Hall"]);
+  assert.deepEqual(args, [4, 7, "Catan Night", "Bring snacks", "2026-09-01", "19:00", "Community Hall", null]);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.data.EVENT_DESCRIPTION, "Bring snacks");
 });
