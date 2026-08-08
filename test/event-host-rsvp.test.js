@@ -120,6 +120,32 @@ test("database uses the seven-argument parameterized CreateEvent call and normal
   assert.equal(event.EVENT_DESCRIPTION, "Description");
 });
 
+test("valid game creation uses CreateEventWithGame and preserves host RSVP", async () => {
+  const calls = [];
+  const database = createDatabase({ async query(sql, values) {
+    calls.push([sql, values]);
+    if (sql.startsWith("SELECT GAME_ID")) return [[{ GAME_ID: 1 }]];
+    return [[[{ EVENT_ID: 10, GAME_ID: 1, HOST_RSVP_STATUS: "GOING" }], { affectedRows: 0 }]];
+  } });
+  const event = await database.createEvent(2, 7, "Catan", null, "2099-08-14", "19:00", "Hall", null, null, 1);
+  assert.equal(calls[1][0], "CALL CreateEventWithGame(?, ?, ?, ?, ?, ?, ?, ?)");
+  assert.deepEqual(calls[1][1], [2, 7, "Catan", null, 1, "2099-08-14", "19:00", "Hall"]);
+  assert.equal(event.HOST_RSVP_STATUS, "GOING");
+});
+
+test("invalid game ID is rejected before event creation", async () => {
+  const res = response();
+  await createEventHandler({ createEvent: async () => assert.fail("database must not be called") })(request({ ...eventBody, gameId: "bad" }), res);
+  assert.equal(res.statusCode, 400);
+});
+
+test("nonexistent game is rejected during event creation", async () => {
+  const database = createDatabase({ async query() { return [[]]; } });
+  const res = response();
+  await createEventHandler(database)(request({ ...eventBody, eventDate: "2099-08-01", gameId: 999 }), res);
+  assert.equal(res.statusCode, 404);
+});
+
 test("event-reading result normalization preserves EVENT_DESCRIPTION", () => {
   const rows = [[{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }], { affectedRows: 0 }];
   assert.deepEqual(unwrapProcedureResult(rows), [{ EVENT_ID: 10, EVENT_DESCRIPTION: "Bring a game." }]);
@@ -149,6 +175,7 @@ test("database group-event query includes descriptions without relying on an out
   const events = await database.readGroupEvents(2);
   assert.match(call[0], /EVENT_DESCRIPTION/);
   assert.match(call[0], /REHOSTED_FROM_EVENT_ID/);
+  assert.match(call[0], /LEFT JOIN games/);
   assert.match(call[0], /AS DISPLAY_STATUS/);
   assert.deepEqual(call[1], [2]);
   assert.equal(events[0].EVENT_DESCRIPTION, "Bring a game.");

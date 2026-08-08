@@ -37,7 +37,7 @@ function createEventHandler(database = DB, options = {}) {
   const deduplicationWindowMs = options.deduplicationWindowMs || 2000;
 
   return async function createEvent(req, res) {
-    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, rehostedFromEventId } = req.body || {};
+    const { groupId, eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventImageUrl, rehostedFromEventId, gameId } = req.body || {};
     const hostId = req.auth.userId;
     if (!eventTitle || !eventDate || !eventTime) {
       return res.status(400).json({ success: false, message: "Event title, date, and time are required" });
@@ -59,8 +59,10 @@ function createEventHandler(database = DB, options = {}) {
     if (sourceEventId && new Date(`${eventDate}T${eventTime}`) <= new Date()) {
       return res.status(400).json({ success: false, message: "A rehosted event must use an upcoming date and time" });
     }
+    const selectedGameId = gameId == null ? null : validId(gameId);
+    if (gameId != null && !selectedGameId) return res.status(400).json({ success: false, message: "A valid game ID is required" });
     const suppliedKey = String(req.get && req.get("idempotency-key") || "").trim();
-    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId]);
+    const fingerprint = suppliedKey || JSON.stringify([hostId, groupId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId, selectedGameId]);
     const now = Date.now();
     const existing = submissions.get(fingerprint);
     const isDuplicate = Boolean(existing && now - existing.createdAt < deduplicationWindowMs);
@@ -70,7 +72,9 @@ function createEventHandler(database = DB, options = {}) {
       if (isDuplicate) {
         eventPromise = existing.eventPromise;
       } else {
-        eventPromise = database.createEvent(groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId);
+        const args = [groupId, hostId, eventTitle, normalizedDescription, eventDate, eventTime, eventLocation, normalizedImageUrl, sourceEventId];
+        if (selectedGameId != null) args.push(selectedGameId);
+        eventPromise = database.createEvent(...args);
         submissions.set(fingerprint, { createdAt: now, eventPromise });
         const cleanup = setTimeout(() => submissions.delete(fingerprint), deduplicationWindowMs);
         if (cleanup.unref) cleanup.unref();
@@ -85,7 +89,7 @@ function createEventHandler(database = DB, options = {}) {
       });
     } catch (error) {
       submissions.delete(fingerprint);
-      return handleDbError(res, error);
+      return sendDatabaseError(res, error, "Unable to create event");
     }
   };
 }
@@ -108,6 +112,20 @@ function readGroupEventsHandler(database = DB) {
 }
 
 const readGroupEvents = readGroupEventsHandler();
+
+function readEventHandler(database = DB) {
+  return async function readEvent(req, res) {
+    const eventId = validId(req.params.eventId);
+    if (!eventId) return res.status(400).json({ success: false, message: "A valid event ID is required" });
+    try {
+      const event = await database.readEvent(eventId);
+      if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+      return res.json({ success: true, message: "Event loaded successfully", event, data: event });
+    } catch (error) { return sendDatabaseError(res, error, "Unable to load event"); }
+  };
+}
+
+const readEvent = readEventHandler();
 
 async function readEventRSVPs(req, res) {
   try {
@@ -203,6 +221,17 @@ function createStoryHandlers(database = DB) {
       } catch (error) {
         return sendDatabaseError(res, error, "Unable to update event image");
       }
+    },
+    async setEventGame(req, res) {
+      const eventId = validId(req.params.eventId);
+      if (!eventId) return res.status(400).json({ success: false, message: "A valid event ID is required" });
+      const rawGameId = req.body && req.body.gameId;
+      const gameId = rawGameId === null ? null : validId(rawGameId);
+      if (rawGameId !== null && !gameId) return res.status(400).json({ success: false, message: "gameId must be a positive integer or null" });
+      try {
+        const event = await database.setEventGame(eventId, req.auth.userId, gameId);
+        return res.json({ success: true, message: gameId == null ? "Event game removed successfully" : "Event game updated successfully", event, data: event });
+      } catch (error) { return sendDatabaseError(res, error, "Unable to update event game"); }
     }
   };
 }
@@ -213,14 +242,17 @@ module.exports = {
   listEvents,
   createEvent,
   readGroupEvents,
+  readEvent,
   readEventRSVPs,
   cancelEvent: storyHandlers.cancelEvent,
   changeHost: storyHandlers.changeHost,
   updateEvent: storyHandlers.updateEvent,
   updateEventImage: storyHandlers.updateEventImage,
+  setEventGame: storyHandlers.setEventGame,
   createStoryHandlers,
   createEventHandler,
   readGroupEventsHandler,
   listEventsHandler,
+  readEventHandler,
   unwrapProcedureResult
 };

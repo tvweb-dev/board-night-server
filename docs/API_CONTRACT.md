@@ -18,6 +18,44 @@ Success:
 }
 ```
 
+## Game Catalogue
+
+All catalogue read and favourite endpoints require `Authorization: Bearer <token>`.
+`POST /api/games` is disabled for application clients and returns HTTP 403.
+
+### Search Games
+
+`GET /api/games/search?q=catan&limit=25`
+
+`q` is required and is matched case-insensitively against partial game names. Exact
+matches are returned first, followed by prefix and contains matches, then popularity
+and name. `limit` defaults to 25 and must be between 1 and 50. Results include
+`GAME_ID`, `GAME_NAME`, `CATEGORY`, `THUMBNAIL_URL`, player counts, playtimes,
+`MIN_AGE`, `AVERAGE_RATING`, and `USERS_RATED`.
+
+### Read Game Details
+
+`GET /api/games/:gameId`
+
+Returns the expanded catalogue record. `RULES_URL` and other imported metadata may
+be `null`; the API does not synthesize missing values.
+
+### Favourite Games
+
+```text
+GET    /api/games/favorites/:userId
+POST   /api/games/favorites
+DELETE /api/games/favorites
+PUT    /api/games/favorites/:userId
+```
+
+Favourite reads remain visible to authenticated users and include catalogue images,
+player counts, playtimes, age, and rating. Writes always use the authenticated user.
+The legacy `userId` request field is accepted only when it matches the token owner.
+
+`GET /api/games` remains available for existing clients, returns only `GAME_ID`,
+`GAME_NAME`, and `CATEGORY`, and is deprecated for selectors in favor of `/search`.
+
 Error:
 
 ```json
@@ -174,6 +212,30 @@ Body:
 
 Uses procedure:
 CreateEvent
+
+An optional `gameId` may be omitted or set to `null`; those requests continue using
+the original seven-parameter `CreateEvent`. A positive `gameId` uses
+`CreateEventWithGame` after the game is validated. The host's RSVP remains `GOING`.
+The verified procedure order is group, host, title, description, game ID, date, time,
+and location.
+
+### Read Event Details
+
+`GET /api/events/:eventId` requires authentication. It preserves existing event
+fields and adds nullable `GAME_ID` and `GAME`. `GAME` is `null` when no game is
+selected; otherwise it contains the selected catalogue metadata. `RULES_URL` may be
+`null`.
+
+### Change Event Game
+
+`PATCH /api/events/:eventId/game` requires authentication and accepts either:
+
+```json
+{ "gameId": 123 }
+```
+
+or `{ "gameId": null }` to remove the selection. Only the current event host may
+change it, and cancelled, completed, or already-started events cannot be modified.
 
 `eventDescription` is optional. Missing, null, or blank descriptions are stored as
 `NULL`; nonblank descriptions are trimmed and may contain at most 2000 characters.

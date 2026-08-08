@@ -2,7 +2,7 @@ function statusForDatabaseError(error) {
   const message = String(error.sqlMessage || error.message || "").toLowerCase();
   if (/not found|does not exist|no invitation|no event|no user/.test(message)) return 404;
   if (/not authorized|not the current host|not.*group member|only.*host|permission|forbidden/.test(message)) return 403;
-  if (/already|started|cancelled|canceled|completed|conflict|same host/.test(message)) return 409;
+  if (/already|started|cancelled|canceled|completed|conflict|same host|no longer be modified/.test(message)) return 409;
   return 400;
 }
 
