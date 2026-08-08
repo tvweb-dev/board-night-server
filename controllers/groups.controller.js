@@ -146,6 +146,59 @@ function addGroupMemberHandler(database = pool, notificationService = notificati
 
 const addGroupMember = addGroupMemberHandler();
 
+function removeGroupMemberHandler(database = pool) {
+  return async function removeGroupMember(req, res) {
+    const groupId = Number(req.params.groupId);
+    const memberId = Number(req.params.userId);
+    if (!Number.isInteger(groupId) || groupId < 1 || !Number.isInteger(memberId) || memberId < 1) return res.status(400).json({ success: false, message: "Valid group and member IDs are required" });
+    if (memberId === req.auth.userId) return res.status(400).json({ success: false, message: "You cannot remove yourself from the group" });
+    const connection = database.getConnection ? await database.getConnection() : database;
+    try {
+      if (connection.beginTransaction) await connection.beginTransaction();
+      const [permissions] = await connection.query(
+        `SELECT g.CREATED_BY,
+                EXISTS(SELECT 1 FROM events e WHERE e.GROUP_ID = g.GROUP_ID AND e.HOST_ID = ?
+                  AND e.EVENT_STATUS NOT IN ('CANCELED', 'CANCELLED', 'COMPLETED')
+                  AND TIMESTAMP(e.EVENT_DATE, e.EVENT_TIME) > NOW()) AS IS_EVENT_HOST
+           FROM \`groups\` g WHERE g.GROUP_ID = ? FOR UPDATE`,
+        [req.auth.userId, groupId]
+      );
+      if (!permissions.length) {
+        if (connection.rollback) await connection.rollback();
+        return res.status(404).json({ success: false, message: "Group not found" });
+      }
+      const permission = permissions[0];
+      if (Number(permission.CREATED_BY) !== req.auth.userId && !Number(permission.IS_EVENT_HOST)) {
+        if (connection.rollback) await connection.rollback();
+        return res.status(403).json({ success: false, message: "Only the group creator or an event host can remove members" });
+      }
+      if (Number(permission.CREATED_BY) === memberId) {
+        if (connection.rollback) await connection.rollback();
+        return res.status(403).json({ success: false, message: "The group creator cannot be removed" });
+      }
+      await connection.query(
+        `DELETE ei FROM event_invites ei JOIN events e ON e.EVENT_ID = ei.EVENT_ID
+          WHERE e.GROUP_ID = ? AND ei.USER_ID = ?`,
+        [groupId, memberId]
+      );
+      const [result] = await connection.query("DELETE FROM group_members WHERE GROUP_ID = ? AND USER_ID = ?", [groupId, memberId]);
+      if (!result.affectedRows) {
+        if (connection.rollback) await connection.rollback();
+        return res.status(404).json({ success: false, message: "Group member not found" });
+      }
+      if (connection.commit) await connection.commit();
+      return res.json({ success: true, message: "Member removed successfully", data: { GROUP_ID: groupId, USER_ID: memberId } });
+    } catch (error) {
+      if (connection.rollback) await connection.rollback();
+      return handleDbError(res, error);
+    } finally {
+      if (connection.release) connection.release();
+    }
+  };
+}
+
+const removeGroupMember = removeGroupMemberHandler();
+
 async function readGroupMembers(req, res) {
   try {
     const { groupId } = req.params;
@@ -177,6 +230,8 @@ module.exports = {
   readUserGroups,
   addGroupMember,
   addGroupMemberHandler,
+  removeGroupMember,
+  removeGroupMemberHandler,
   readGroupMembers,
   updateGroupImage,
   updateGroupImageHandler
