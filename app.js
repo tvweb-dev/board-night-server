@@ -13,6 +13,7 @@ const gamesRoutes = require("./routes/games.routes");
 const notificationsRoutes = require("./routes/notifications.routes");
 const friendsRoutes = require("./routes/friends.routes");
 const availabilityRoutes = require("./routes/availability.routes");
+const uploadsRoutes = require("./routes/uploads.routes");
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/games", gamesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/availability", availabilityRoutes);
+app.use("/api/uploads", uploadsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
