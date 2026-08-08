@@ -5,6 +5,7 @@ const FIELD_LIMITS = {
   favoriteFood: 100, favoriteDrink: 100, allergies: 255,
   city: 100, province: 100, country: 100
 };
+const REQUIRED_FIELDS = ["firstName", "lastName", "nickname", "favoriteFood", "favoriteDrink", "allergies", "city", "province", "country"];
 
 function userId(value) {
   const parsed = Number(value);
@@ -18,6 +19,9 @@ function normalizeProfile(body = {}) {
     if (value.length > limit) throw new Error(`${field} must be at most ${limit} characters`);
     profile[field] = value || null;
   }
+  for (const field of REQUIRED_FIELDS) {
+    if (!profile[field]) throw new Error(`${field} is required`);
+  }
   if (profile.imageUrl) {
     let url;
     try { url = new URL(profile.imageUrl); } catch (_) { throw new Error("imageUrl must be a valid HTTP(S) URL"); }
@@ -30,7 +34,7 @@ function normalizeProfile(body = {}) {
     }
     profile.birthday = birthday;
   } else {
-    profile.birthday = null;
+    throw new Error("birthday is required");
   }
   return profile;
 }
