@@ -73,6 +73,70 @@ async function readUserGroups(req, res) {
   }
 }
 
+function groupLifecycleHandlers(database = pool) {
+  async function setInactive(req, res) {
+    const groupId = Number(req.params.groupId);
+    if (!Number.isInteger(groupId) || groupId < 1) return res.status(400).json({ success: false, message: "A valid group ID is required" });
+    try {
+      const [result] = await database.query(
+        "UPDATE `groups` SET IS_ACTIVE = 0, INACTIVATED_AT = NOW() WHERE GROUP_ID = ? AND CREATED_BY = ? AND IS_ACTIVE = 1",
+        [groupId, req.auth.userId]
+      );
+      if (!result.affectedRows) return res.status(403).json({ success: false, message: "Only the creator can deactivate an active group" });
+      return res.json({ success: true, message: "Group set as inactive", data: { GROUP_ID: groupId, IS_ACTIVE: 0 } });
+    } catch (error) {
+      return handleDbError(res, error);
+    }
+  }
+
+  async function reactivate(req, res) {
+    const groupId = Number(req.params.groupId);
+    if (!Number.isInteger(groupId) || groupId < 1) return res.status(400).json({ success: false, message: "A valid group ID is required" });
+    const connection = database.getConnection ? await database.getConnection() : database;
+    try {
+      if (connection.beginTransaction) await connection.beginTransaction();
+      const [groups] = await connection.query(
+        `SELECT source.GROUP_NAME, source.GROUP_IMAGE_URL FROM \`groups\` source
+          WHERE source.GROUP_ID = ? AND source.CREATED_BY = ? AND source.IS_ACTIVE = 0
+            AND NOT EXISTS (SELECT 1 FROM \`groups\` child WHERE child.REACTIVATED_FROM_GROUP_ID = source.GROUP_ID AND child.IS_ACTIVE = 1)
+          FOR UPDATE`,
+        [groupId, req.auth.userId]
+      );
+      if (!groups.length) {
+        if (connection.rollback) await connection.rollback();
+        return res.status(403).json({ success: false, message: "Only the creator can reactivate an inactive group" });
+      }
+      const source = groups[0];
+      const [insert] = await connection.query(
+        "INSERT INTO `groups` (GROUP_NAME, CREATED_BY, GROUP_IMAGE_URL, IS_ACTIVE, REACTIVATED_FROM_GROUP_ID) VALUES (?, ?, ?, 1, ?)",
+        [source.GROUP_NAME, req.auth.userId, source.GROUP_IMAGE_URL || null, groupId]
+      );
+      const newGroupId = Number(insert.insertId);
+      await connection.query(
+        `INSERT INTO group_members (GROUP_ID, USER_ID, MEMBER_ROLE)
+         SELECT ?, USER_ID, CASE WHEN USER_ID = ? THEN 'HOST' ELSE 'MEMBER' END
+           FROM group_members WHERE GROUP_ID = ?`,
+        [newGroupId, req.auth.userId, groupId]
+      );
+      if (connection.commit) await connection.commit();
+      return res.status(201).json({
+        success: true,
+        message: "Group reactivated as a new group",
+        data: { GROUP_ID: newGroupId, GROUP_NAME: source.GROUP_NAME, CREATED_BY: req.auth.userId, GROUP_IMAGE_URL: source.GROUP_IMAGE_URL || null, IS_ACTIVE: 1, REACTIVATED_FROM_GROUP_ID: groupId }
+      });
+    } catch (error) {
+      if (connection.rollback) await connection.rollback();
+      return handleDbError(res, error);
+    } finally {
+      if (connection.release) connection.release();
+    }
+  }
+
+  return { setInactive, reactivate };
+}
+
+const lifecycleHandlers = groupLifecycleHandlers();
+
 function updateGroupImageHandler(database = pool) {
   return async function updateGroupImage(req, res) {
     const groupId = Number(req.params.groupId);
@@ -100,7 +164,7 @@ function addGroupMemberHandler(database = pool, notificationService = notificati
     const lookup = String(memberQuery ?? userId ?? "").trim();
     if (!lookup) return res.status(400).json({ success: false, message: "Enter an existing user ID, email, nickname, or full name" });
     const [ownedGroups] = await database.query(
-      "SELECT GROUP_ID FROM `groups` WHERE GROUP_ID = ? AND CREATED_BY = ?",
+      "SELECT GROUP_ID FROM `groups` WHERE GROUP_ID = ? AND CREATED_BY = ? AND IS_ACTIVE = 1",
       [groupId, req.auth.userId]
     );
     if (!ownedGroups.length) {
@@ -234,5 +298,8 @@ module.exports = {
   removeGroupMemberHandler,
   readGroupMembers,
   updateGroupImage,
-  updateGroupImageHandler
+  updateGroupImageHandler,
+  groupLifecycleHandlers,
+  setInactive: lifecycleHandlers.setInactive,
+  reactivate: lifecycleHandlers.reactivate
 };
