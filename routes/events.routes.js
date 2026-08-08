@@ -7,7 +7,7 @@ const router = express.Router();
 router.get("/", requireAuth, eventsController.listEvents);
 router.post("/", requireAuth, eventsController.createEvent);
 router.get("/group/:groupId", eventsController.readGroupEvents);
-router.get("/:eventId/rsvps", eventsController.readEventRSVPs);
+router.get("/:eventId/rsvps", requireAuth, eventsController.readEventRSVPs);
 router.patch("/:eventId/game", requireAuth, eventsController.setEventGame);
 router.put("/:eventId", requireAuth, eventsController.updateEvent);
 router.patch("/:eventId/image", requireAuth, eventsController.updateEventImage);

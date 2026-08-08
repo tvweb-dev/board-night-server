@@ -12,3 +12,12 @@ test("member and RSVP reads include profile nickname and image", () => {
     assert.match(source, /up\.IMAGE_URL/);
   }
 });
+
+test("RSVP reads include attendee food, drink, and allergy preferences", () => {
+  const events = fs.readFileSync(path.join(__dirname, "../controllers/events.controller.js"), "utf8");
+  const routes = fs.readFileSync(path.join(__dirname, "../routes/events.routes.js"), "utf8");
+  assert.match(events, /up\.FAVORITE_FOOD/);
+  assert.match(events, /up\.FAVORITE_DRINK/);
+  assert.match(events, /up\.ALLERGIES/);
+  assert.match(routes, /router\.get\("\/:eventId\/rsvps", requireAuth/);
+});

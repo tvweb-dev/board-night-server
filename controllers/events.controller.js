@@ -132,7 +132,8 @@ async function readEventRSVPs(req, res) {
     const { eventId } = req.params;
 
     const [rows] = await pool.query(
-      `SELECT ei.*, u.EMAIL, up.FIRST_NAME, up.LAST_NAME, up.NICKNAME, up.IMAGE_URL
+      `SELECT ei.*, u.EMAIL, up.FIRST_NAME, up.LAST_NAME, up.NICKNAME, up.IMAGE_URL,
+              up.FAVORITE_FOOD, up.FAVORITE_DRINK, up.ALLERGIES
          FROM event_invites ei
          JOIN users u ON u.USER_ID = ei.USER_ID
          LEFT JOIN user_profile up ON up.USER_ID = ei.USER_ID
