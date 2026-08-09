@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { emailDetailsHandler } = require("../controllers/invites.controller");
 const { createDatabase } = require("../data/board-night.db");
+const emailMigration = require("../scripts/install-invite-email-status-procedures");
 
 function response() {
   return {
@@ -66,6 +67,13 @@ test("rejects an unsupported email status", async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test("rejects email errors longer than the normalized 500-character column", async () => {
+  const handlers = emailDetailsHandler({ updateInviteEmailDetails: async () => assert.fail("database must not be called") });
+  const res = response();
+  await handlers.update(request("3", { emailStatus: "FAILED", emailError: "x".repeat(501) }), res);
+  assert.equal(res.statusCode, 400);
+});
+
 test("database calls parameterized read and update procedures", async () => {
   const calls = [];
   const database = createDatabase({
@@ -82,4 +90,18 @@ test("database calls parameterized read and update procedures", async () => {
     ["CALL ReadInviteEmailStatus(?, ?)", [3, 7]],
     ["CALL UpdateInviteEmailDetails(?, ?, ?, ?, ?, ?)", [3, 7, "SENT", "2026-07-28 20:00:00", "msg_1", null]]
   ]);
+});
+
+test("repeatable email migration repairs procedures, description projection, and database cooldown", async () => {
+  const calls = [];
+  await emailMigration.install({ async query(statement) { calls.push(statement); } });
+  assert.deepEqual(calls, emailMigration.statements);
+  assert.match(calls.join("\n"), /MODIFY EMAIL_ERROR VARCHAR\(500\)/);
+  assert.match(calls.join("\n"), /CREATE PROCEDURE ReadInviteEmailStatus/);
+  assert.match(calls.join("\n"), /CREATE PROCEDURE UpdateInviteEmailDetails/);
+  assert.match(calls.join("\n"), /CREATE PROCEDURE ReadInviteForEmail/);
+  assert.match(calls.join("\n"), /e\.EVENT_DESCRIPTION/);
+  assert.match(calls.join("\n"), /GAME_NAME/);
+  assert.match(calls.join("\n"), /FOR UPDATE/);
+  assert.match(calls.join("\n"), /INTERVAL 5 MINUTE/);
 });

@@ -110,12 +110,25 @@ function createEmailHandler(database = DB, mailer = emailService) {
     if (["CANCELED", "CANCELLED", "COMPLETED"].includes(details.eventStatus)) {
       return res.status(409).json({ success: false, message: `Cannot email an invitation for a ${details.eventStatus.toLowerCase()} event` });
     }
+    const eventStart = new Date(`${String(details.eventDate).slice(0, 10)}T${details.eventTime}`);
+    if (!Number.isNaN(eventStart.getTime()) && eventStart <= new Date()) {
+      return res.status(409).json({ success: false, message: "Cannot email an invitation for a past event" });
+    }
 
     try {
       await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENDING", null, null);
-      const baseUrl = String(process.env.FRONTEND_BASE_URL || "").replace(/\/$/, "");
+      const baseUrl = String(process.env.FRONTEND_BASE_URL || "").trim();
       if (!baseUrl) throw new Error("Frontend URL is not configured");
-      const rsvpUrl = `${baseUrl}/rsvp.html?event=${encodeURIComponent(details.eventId)}&invite=${encodeURIComponent(inviteId)}`;
+      let rsvpUrl;
+      try {
+        const url = new URL("/rsvp.html", baseUrl);
+        if (!["http:", "https:"].includes(url.protocol)) throw new Error("invalid protocol");
+        url.searchParams.set("event", details.eventId);
+        url.searchParams.set("invite", inviteId);
+        rsvpUrl = url.toString();
+      } catch (_) {
+        throw new Error("Frontend URL is not configured correctly");
+      }
       const sent = await mailer.sendInvitationEmail(invite, rsvpUrl);
       const updated = await database.updateInviteEmailStatus(inviteId, req.auth.userId, "SENT", sent.messageId, null);
       return res.json({
@@ -127,9 +140,13 @@ function createEmailHandler(database = DB, mailer = emailService) {
         recipientEmail: details.recipientEmail
       });
     } catch (error) {
-      const credential = process.env.EMAIL_API_KEY;
       const rawError = String(error.message || "Email delivery failed");
-      const safeError = (credential ? rawError.split(credential).join("[redacted]") : rawError).slice(0, 240);
+      if (/resend cooldown/i.test(rawError)) {
+        return res.status(429).json({ success: false, message: "Please wait before resending this invitation email" });
+      }
+      const credentials = [process.env.GMAIL_APP_PASSWORD, process.env.JWT_SECRET, process.env.DB_PASSWORD, process.env.dbpassword]
+        .filter(Boolean);
+      const safeError = credentials.reduce((message, credential) => message.split(credential).join("[redacted]"), rawError).slice(0, 500);
       try {
         await database.updateInviteEmailStatus(inviteId, req.auth.userId, "FAILED", null, safeError);
       } catch (statusError) {
@@ -178,8 +195,8 @@ function emailDetailsHandler(database = DB) {
       if (emailMessageId !== null && (typeof emailMessageId !== "string" || emailMessageId.length > 255)) {
         return res.status(400).json({ success: false, message: "emailMessageId must be a string of at most 255 characters or null" });
       }
-      if (emailError !== null && (typeof emailError !== "string" || emailError.length > 2000)) {
-        return res.status(400).json({ success: false, message: "emailError must be a string of at most 2000 characters or null" });
+      if (emailError !== null && (typeof emailError !== "string" || emailError.length > 500)) {
+        return res.status(400).json({ success: false, message: "emailError must be a string of at most 500 characters or null" });
       }
 
       try {
