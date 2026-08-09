@@ -56,3 +56,37 @@ test("a user cannot mark another user's notification read", async () => {
   assert.equal(res.statusCode, 404);
   assert.equal(res.body.success, false);
 });
+
+test("a user can accept their own group invitation", async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params) => {
+      calls.push([sql, params]);
+      if (sql.includes("FROM notifications n")) return [[{ GROUP_ID: 4, CREATED_BY: 2 }]];
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const handlers = createNotificationHandlers(db);
+  const result = response();
+  await handlers.respondToGroupInvitation({ params: { notificationId: "12" }, body: { decision: "JOIN" }, auth: { userId: 7 } }, result);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.data.DECISION, "JOIN");
+  assert.equal(calls.some(([sql]) => sql.includes("DELETE FROM group_members")), false);
+});
+
+test("declining a group invitation removes only the invited user's membership and event invitations", async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params) => {
+      calls.push([sql, params]);
+      if (sql.includes("FROM notifications n")) return [[{ GROUP_ID: 4, CREATED_BY: 2 }]];
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const handlers = createNotificationHandlers(db);
+  const result = response();
+  await handlers.respondToGroupInvitation({ params: { notificationId: "12" }, body: { decision: "DECLINE" }, auth: { userId: 7 } }, result);
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(calls.find(([sql]) => sql.includes("DELETE FROM group_members"))[1], [4, 7]);
+  assert.deepEqual(calls.find(([sql]) => sql.includes("DELETE ei FROM event_invites"))[1], [4, 7]);
+});
