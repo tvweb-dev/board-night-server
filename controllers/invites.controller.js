@@ -30,7 +30,7 @@ async function createInvite(req, res) {
 
     const [allowed] = await pool.query(
       `SELECT e.EVENT_ID FROM events e
-       JOIN group_members gm ON gm.GROUP_ID = e.GROUP_ID AND gm.USER_ID = ?
+       JOIN group_members gm ON gm.GROUP_ID = e.GROUP_ID AND gm.USER_ID = ? AND gm.MEMBER_ROLE <> 'PENDING'
        WHERE e.EVENT_ID = ? AND e.HOST_ID = ?`,
       [userId, eventId, req.auth.userId]
     );

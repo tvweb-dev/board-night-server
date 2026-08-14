@@ -71,6 +71,7 @@ test("a user can accept their own group invitation", async () => {
   await handlers.respondToGroupInvitation({ params: { notificationId: "12" }, body: { decision: "JOIN" }, auth: { userId: 7 } }, result);
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.data.DECISION, "JOIN");
+  assert.deepEqual(calls.find(([sql]) => sql.includes("UPDATE group_members SET MEMBER_ROLE"))[1], [4, 7]);
   assert.equal(calls.some(([sql]) => sql.includes("DELETE FROM group_members")), false);
 });
 
@@ -87,6 +88,7 @@ test("declining a group invitation removes only the invited user's membership an
   const result = response();
   await handlers.respondToGroupInvitation({ params: { notificationId: "12" }, body: { decision: "DECLINE" }, auth: { userId: 7 } }, result);
   assert.equal(result.statusCode, 200);
+  assert.match(calls.find(([sql]) => sql.includes("DELETE FROM group_members"))[0], /MEMBER_ROLE = 'PENDING'/);
   assert.deepEqual(calls.find(([sql]) => sql.includes("DELETE FROM group_members"))[1], [4, 7]);
   assert.deepEqual(calls.find(([sql]) => sql.includes("DELETE ei FROM event_invites"))[1], [4, 7]);
 });

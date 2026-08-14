@@ -75,7 +75,16 @@ function createNotificationHandlers(database = pool) {
         }
 
         const groupId = Number(rows[0].GROUP_ID);
-        if (decision === 'DECLINE') {
+        if (decision === 'JOIN') {
+          const [membership] = await connection.query(
+            "UPDATE group_members SET MEMBER_ROLE = 'MEMBER' WHERE GROUP_ID = ? AND USER_ID = ? AND MEMBER_ROLE = 'PENDING'",
+            [groupId, req.auth.userId]
+          );
+          if (!membership.affectedRows) {
+            if (connection.rollback) await connection.rollback();
+            return res.status(409).json({ success: false, message: "This group invitation is no longer pending" });
+          }
+        } else {
           if (Number(rows[0].CREATED_BY) === req.auth.userId) {
             if (connection.rollback) await connection.rollback();
             return res.status(403).json({ success: false, message: "The group creator cannot decline their own group" });
@@ -86,7 +95,7 @@ function createNotificationHandlers(database = pool) {
              WHERE e.GROUP_ID = ? AND ei.USER_ID = ?`,
             [groupId, req.auth.userId]
           );
-          await connection.query("DELETE FROM group_members WHERE GROUP_ID = ? AND USER_ID = ?", [groupId, req.auth.userId]);
+          await connection.query("DELETE FROM group_members WHERE GROUP_ID = ? AND USER_ID = ? AND MEMBER_ROLE = 'PENDING'", [groupId, req.auth.userId]);
         }
         await connection.query(
           "UPDATE notifications SET IS_READ = 1, READ_AT = COALESCE(READ_AT, NOW()) WHERE NOTIFICATION_ID = ? AND USER_ID = ?",

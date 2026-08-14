@@ -12,7 +12,7 @@ function request(memberQuery) {
   return { body: { groupId: 9, memberQuery }, auth: { userId: 4 } };
 }
 
-test("group host can add an existing user by nickname without creating an account", async () => {
+test("group host can invite an existing user by nickname as pending without creating an account", async () => {
   const calls = [];
   const database = { async query(sql, values) {
     calls.push([sql, values]);
@@ -29,8 +29,9 @@ test("group host can add an existing user by nickname without creating an accoun
   assert.equal(res.statusCode, 201);
   assert.match(calls[1][0], /up\.NICKNAME/);
   assert.deepEqual(calls[1][1], ["Dice Master", "Dice Master", "Dice Master"]);
-  assert.deepEqual(calls[2][1], [9, 1, "MEMBER"]);
+  assert.deepEqual(calls[2][1], [9, 1, "PENDING"]);
   assert.equal(notifiedUserId, 1);
+  assert.match(res.body.message, /invitation sent/i);
 });
 
 test("unknown display name is rejected and no member is added", async () => {

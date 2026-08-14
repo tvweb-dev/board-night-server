@@ -15,8 +15,8 @@ async function notifyGroupMemberAdded(db, { userId, groupId, actorUserId }) {
   const [groups] = await db.query("SELECT GROUP_NAME FROM `groups` WHERE GROUP_ID = ?", [groupId]);
   const groupName = groups[0] && groups[0].GROUP_NAME || "a group";
   return createNotification(db, {
-    userId, type: "GROUP_MEMBER_ADDED", title: "Added to a group",
-    message: `You were added to ${groupName}.`, groupId, actorUserId
+    userId, type: "GROUP_MEMBER_ADDED", title: "Group invitation",
+    message: `You were invited to join ${groupName}.`, groupId, actorUserId
   });
 }
 

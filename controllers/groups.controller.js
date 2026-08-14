@@ -190,7 +190,7 @@ function addGroupMemberHandler(database = pool, notificationService = notificati
     const [rows] = await database.query("CALL AddGroupMember(?, ?, ?)", [
       groupId,
       resolvedUserId,
-      memberRole || "MEMBER"
+      "PENDING"
     ]);
 
     await notificationService.notifyGroupMemberAdded(database, {
@@ -199,7 +199,7 @@ function addGroupMemberHandler(database = pool, notificationService = notificati
 
     res.status(201).json({
       success: true,
-      message: "Member added successfully",
+      message: "Group invitation sent successfully",
       data: getFirstResult(rows)
     });
   } catch (error) {
