@@ -7,6 +7,7 @@ const { removePlaceholderUsers } = require("./data/placeholder-users.cleanup");
 const { ensureFriendsSchema } = require("./data/friends.schema");
 const { ensureAvailabilitySchema } = require("./data/availability.schema");
 const { ensureGroupLifecycleSchema } = require("./data/groups.schema");
+const { verifyFriendsIntegration } = require("./scripts/verify-friends-integration");
 
 async function start() {
   await ensureNotificationsSchema(pool);
@@ -14,6 +15,8 @@ async function start() {
   await ensureFriendsSchema(pool);
   await ensureAvailabilitySchema(pool);
   await ensureGroupLifecycleSchema(pool);
+  const friendVerification = await verifyFriendsIntegration(pool);
+  console.log(`Production friend verification: ${JSON.stringify(friendVerification)}`);
   const removedPlaceholderUsers = await removePlaceholderUsers(pool);
   if (removedPlaceholderUsers) console.log(`Removed ${removedPlaceholderUsers} placeholder user account(s)`);
   app.listen(port, () => {

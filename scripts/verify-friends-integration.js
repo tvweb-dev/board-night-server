@@ -16,20 +16,20 @@ function response() {
   };
 }
 
-async function verify() {
-  await ensureFriendsSchema(pool);
-  const [tables] = await pool.query(
+async function verifyFriendsIntegration(database = pool) {
+  await ensureFriendsSchema(database);
+  const [tables] = await database.query(
     `SELECT TABLE_NAME FROM information_schema.TABLES
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'direct_friends'`
   );
   if (!tables.length) throw new Error("direct_friends table was not created");
 
-  const [users] = await pool.query("SELECT USER_ID FROM users ORDER BY USER_ID LIMIT 2");
+  const [users] = await database.query("SELECT USER_ID FROM users ORDER BY USER_ID LIMIT 2");
   if (users.length < 2) throw new Error("At least two existing users are required for the integration check");
 
   const firstId = Number(users[0].USER_ID);
   const secondId = Number(users[1].USER_ID);
-  const connection = await pool.getConnection();
+  const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
     await connection.query(
@@ -54,21 +54,27 @@ async function verify() {
       throw new Error("New friendship was not returned by the friends list");
     }
 
-    console.log(JSON.stringify({
+    return {
       schema: "present",
       addEndpoint: "passed",
       mutualRows: savedRows.length,
       listEndpoint: "passed",
       transaction: "rolled back"
-    }));
+    };
   } finally {
     await connection.rollback();
     connection.release();
-    await pool.end();
   }
 }
 
-verify().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  verifyFriendsIntegration()
+    .then((result) => console.log(JSON.stringify(result)))
+    .catch((error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+    })
+    .finally(() => pool.end());
+}
+
+module.exports = { verifyFriendsIntegration };
