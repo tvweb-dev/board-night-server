@@ -10,10 +10,12 @@ function response() {
 test("friends schema stores hidden status per user and friend", async () => {
   const statements = [];
   await ensureFriendsSchema({ async query(sql) { statements.push(sql); } });
-  assert.equal(statements.length, 2);
+  assert.equal(statements.length, 3);
+  assert.match(statements[0], /CREATE TABLE IF NOT EXISTS direct_friends/);
   assert.match(statements[0], /PRIMARY KEY \(USER_ID, FRIEND_USER_ID\)/);
-  assert.match(statements[1], /CREATE TABLE IF NOT EXISTS friend_notes/);
-  assert.match(statements[1], /NOTE VARCHAR\(300\) NOT NULL/);
+  assert.match(statements[1], /CREATE TABLE IF NOT EXISTS hidden_friends/);
+  assert.match(statements[2], /CREATE TABLE IF NOT EXISTS friend_notes/);
+  assert.match(statements[2], /NOTE VARCHAR\(300\) NOT NULL/);
 });
 
 test("friend list derives first shared date and group count in the database", async () => {
@@ -28,9 +30,63 @@ test("friend list derives first shared date and group count in the database", as
 
   assert.match(query[0], /MIN\(GREATEST\(mine\.CREATED_AT, theirs\.CREATED_AT\)\) AS FRIENDS_SINCE/);
   assert.match(query[0], /COUNT\(DISTINCT mine\.GROUP_ID\) AS SHARED_GROUP_COUNT/);
+  assert.match(query[0], /FROM direct_friends WHERE USER_ID/);
   assert.match(query[0], /notes\.NOTE AS FRIEND_NOTE/);
-  assert.deepEqual(query[1], [1]);
+  assert.deepEqual(query[1], [1, 1, 1, 1]);
   assert.equal(res.body.data[0].FRIENDS_SINCE, "2026-01-02");
+});
+
+test("adding by nickname creates a mutual direct friendship", async () => {
+  const calls = [];
+  const handlers = friendsHandlers({ async query(sql, values) {
+    calls.push([sql, values]);
+    if (sql.includes("FROM users u")) return [[{ USER_ID: 7, EMAIL: "sam@example.com", NICKNAME: "MeepleFan" }]];
+    return [{ affectedRows: 2 }];
+  } });
+  const res = response();
+
+  await handlers.add({ auth: { userId: 1 }, body: { friendQuery: "MeepleFan" } }, res);
+
+  assert.equal(res.statusCode, 201);
+  assert.match(calls[1][0], /INSERT IGNORE INTO direct_friends/);
+  assert.deepEqual(calls[1][1], [1, 7, 7, 1]);
+  assert.equal(res.body.data.USER_ID, 7);
+  assert.equal(res.body.data.ALREADY_FRIEND, false);
+});
+
+test("adding an existing direct friend is idempotent", async () => {
+  const handlers = friendsHandlers({ async query(sql) {
+    if (sql.includes("FROM users u")) return [[{ USER_ID: 7, NICKNAME: "MeepleFan" }]];
+    return [{ affectedRows: 0 }];
+  } });
+  const res = response();
+
+  await handlers.add({ auth: { userId: 1 }, body: { friendQuery: "7" } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.ALREADY_FRIEND, true);
+});
+
+test("an ambiguous display name asks for a unique identifier", async () => {
+  const handlers = friendsHandlers({ async query() { return [[{ USER_ID: 2 }, { USER_ID: 3 }]]; } });
+  const res = response();
+
+  await handlers.add({ auth: { userId: 1 }, body: { friendQuery: "Sam Player" } }, res);
+
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.message, /email or user ID/);
+});
+
+test("a user cannot add themselves", async () => {
+  const handlers = friendsHandlers({ async query(sql) {
+    assert.doesNotMatch(sql, /INSERT IGNORE/);
+    return [[{ USER_ID: 1 }]];
+  } });
+  const res = response();
+
+  await handlers.add({ auth: { userId: 1 }, body: { friendQuery: "1" } }, res);
+
+  assert.equal(res.statusCode, 400);
 });
 
 test("a private friend note is saved only after shared-group validation", async () => {

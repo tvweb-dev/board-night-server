@@ -126,6 +126,37 @@ Success:
 }
 ```
 
+## Friends
+
+All friend endpoints require a bearer token. Friends include both accepted group
+members and users added directly, with duplicates merged in the list response.
+
+### Add Friend
+
+POST /api/friends
+
+Body:
+
+```json
+{
+  "friendQuery": "MeepleFan"
+}
+```
+
+`friendQuery` must exactly match a user ID, full profile name, nickname, or email
+(case-insensitive except for numeric IDs). If a name or nickname matches more than
+one account, the API returns `409` and the user must enter an email or user ID.
+Adding a friend makes the friendship visible to both users. Repeating the request
+is safe and returns `200`; a new friendship returns `201`.
+
+### List Friends
+
+GET /api/friends
+
+Returns direct friends and friends derived from shared groups. Each result includes
+profile fields, `SHARED_GROUP_COUNT`, `FRIENDS_SINCE`, `IS_HIDDEN`, and
+`FRIEND_NOTE`.
+
 ## Groups
 
 ### Create Group
